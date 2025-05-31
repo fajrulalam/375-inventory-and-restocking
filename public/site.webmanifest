@@ -1,0 +1,17 @@
+{
+  "name": "375 Dashboard",
+  "short_name": "375 Dashboard",
+  "description": "375 Inventory and Restocking Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/assets/375_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
