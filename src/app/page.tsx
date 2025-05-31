@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import Image from "next/image";
 import { initializeApp } from "firebase/app";
@@ -37,7 +37,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 interface TransactionData {
-  [key: string]: any;
+  [key: string]: number | string | boolean | null | Record<string, unknown>;
   total: number;
 }
 
@@ -87,7 +87,7 @@ export default function Home() {
   };
 
   // Create a today date variable at the component level to use across the component
-  const today = new Date();
+  const today = useMemo(() => new Date(), []);
 
   useEffect(() => {
     // Ensure we're using Jakarta time (GMT+7)
@@ -389,7 +389,7 @@ export default function Home() {
 
     // Set up real-time updates for hourly data, served orders, and pending orders
     return setupDataUpdates();
-  }, []);
+  }, [today, currentWeekday]);
 
   // Calculate medians for monthly and yearly data using last 8 data points
   const monthlyMedian =

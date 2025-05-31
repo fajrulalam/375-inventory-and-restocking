@@ -58,7 +58,6 @@ const HourlyHistogram = ({
   data,
   maxYAxis,
   yAxisTicks,
-  yAxisInterval = 15,
   onHover = () => {},
   hoveredBar = null,
   dataType,

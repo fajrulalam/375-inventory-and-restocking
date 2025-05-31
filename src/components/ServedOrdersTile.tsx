@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Timestamp } from "firebase/firestore";
 import { ServedOrderData, PendingOrderData } from "@/utils/hourlyHistogramUtils";
 import TabComponent, { TabContent } from "./TabComponent";
 import { formatCurrency } from "@/utils/formatters";
@@ -54,7 +55,7 @@ const ServedOrdersTile = ({
   };
   
   // Calculate elapsed time from a timestamp to now (for pending orders)
-  const getElapsedTime = (timestamp: any) => {
+  const getElapsedTime = (timestamp: Timestamp | null) => {
     if (!timestamp) return "--";
     
     try {

@@ -6,11 +6,10 @@ import {
   query, 
   orderBy, 
   limit, 
-  getDocs, 
-  Timestamp,
-  getFirestore
+  getDocs,
+  Firestore
 } from "firebase/firestore";
-import { getFormattedMonth, getFormattedYear } from './formatters';
+// Removed unused imports: Timestamp, getFirestore, getFormattedMonth, getFormattedYear
 
 export interface HistoricalDataItem {
   date: string;
@@ -231,8 +230,10 @@ export const calculateChartStatistics = (
   };
 };
 
+// Firestore type already imported above
+
 // Fetch monthly historical data
-export const fetchMonthlyHistoricalData = async (db: any, count: number = 12): Promise<HistoricalDataItem[]> => {
+export const fetchMonthlyHistoricalData = async (db: Firestore, count: number = 12): Promise<HistoricalDataItem[]> => {
   try {
     const monthlyCollection = collection(db, "MonthlyTransaction");
     const q = query(
@@ -262,7 +263,7 @@ export const fetchMonthlyHistoricalData = async (db: any, count: number = 12): P
 };
 
 // Fetch yearly historical data
-export const fetchYearlyHistoricalData = async (db: any): Promise<HistoricalDataItem[]> => {
+export const fetchYearlyHistoricalData = async (db: Firestore): Promise<HistoricalDataItem[]> => {
   try {
     const yearlyCollection = collection(db, "YearlyTransaction");
     const q = query(
@@ -292,7 +293,7 @@ export const fetchYearlyHistoricalData = async (db: any): Promise<HistoricalData
 
 // Calculate median quantities for a list of items from historical data
 export const calculateItemMedians = async (
-  db: any, // Firestore instance
+  db: Firestore, // Firestore instance
   collectionName: string, // e.g., "DailyTransaction", "MonthlyTransaction", "YearlyTransaction"
   itemKeys: string[], // Array of item keys (e.g., ["itemA", "itemB"])
   count: number = 12 // Number of historical documents to fetch (ensures at least 8 for median if available)
@@ -328,7 +329,7 @@ export const calculateItemMedians = async (
     const querySnapshot = await getDocs(q);
     console.log(`Retrieved ${querySnapshot.size} documents from ${collectionName}`);
     
-    const historicalDocsData: any[] = [];
+    const historicalDocsData: Record<string, unknown>[] = [];
     querySnapshot.forEach((doc) => {
       // Add document ID to the data for better debugging
       const data = doc.data();
@@ -338,8 +339,15 @@ export const calculateItemMedians = async (
       });
     });
 
-    // Docs are fetched in descending order (newest first). Reverse to get oldest first for calculateMedian.
-    const orderedDocsData = historicalDocsData.reverse();
+    // Sort documents by date (newest first) and take the requested number
+    const orderedDocsData = historicalDocsData
+      .sort((a, b) => {
+        // Sort by date field (descending)
+        const dateA = (a.date as string) || (a.month as string) || (a.year as string) || '';
+        const dateB = (b.date as string) || (b.month as string) || (b.year as string) || '';
+        return String(dateB).localeCompare(String(dateA));
+      })
+      .slice(0, count);
 
     // Log a sample document to see its structure
     if (orderedDocsData.length > 0) {
@@ -354,8 +362,9 @@ export const calculateItemMedians = async (
     for (const itemKey of itemKeys) {
       const quantities: number[] = [];
       for (const docData of orderedDocsData) {
-        if (docData && docData.items && typeof docData.items[itemKey] === 'number') {
-          quantities.push(docData.items[itemKey]);
+        const items = docData.items as Record<string, unknown> | undefined;
+        if (docData && items && typeof items[itemKey] === 'number') {
+          quantities.push(items[itemKey] as number);
         }
       }
       

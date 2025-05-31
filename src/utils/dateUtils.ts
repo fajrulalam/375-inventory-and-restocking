@@ -3,7 +3,7 @@ export const getPreviousSameDayDates = (
   count: number
 ): string[] => {
   const dates: string[] = [];
-  let currentDate = new Date(date);
+  const currentDate = new Date(date);
   const dayOfWeek = currentDate.getDay();
 
   // We need to generate more dates than required to account for missing data

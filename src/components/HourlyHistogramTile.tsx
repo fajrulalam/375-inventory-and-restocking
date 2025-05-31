@@ -6,7 +6,7 @@ import {
   HourlyDataItem,
   calculateHistogramStatistics,
 } from "@/utils/hourlyHistogramUtils";
-import { formatCurrency } from "@/utils/formatters";
+// formatCurrency removed as it's not used in this component
 
 export type HistogramDataType = "total" | "revenue" | "customerCount";
 
@@ -66,13 +66,15 @@ const HourlyHistogramTile = ({
   const getTotals = () => {
     if (data.length === 0) return { total: 0, pending: 0 };
 
-    const served = data.reduce((sum, item) => sum + item.total, 0);
-    const pending = data.reduce((sum, item) => sum + item.pendingTotal, 0);
+    const servedTotal = data.reduce((sum, item) => sum + item.total, 0);
+    const pendingTotal = data.reduce((sum, item) => sum + item.pendingTotal, 0);
 
-    return { served, pending, total: served + pending };
+    return { served: servedTotal, pending: pendingTotal, total: servedTotal + pendingTotal };
   };
 
-  const { served, pending, total } = getTotals();
+  // We're not using these values currently as the display is commented out
+  // but we keep the function for future use
+  getTotals();
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 h-full relative overflow-hidden">

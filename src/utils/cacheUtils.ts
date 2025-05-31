@@ -34,7 +34,7 @@ export const isCacheValid = (key: string): boolean => {
     const cacheItemStr = localStorage.getItem(`${CACHE_PREFIX}${key}`);
     if (!cacheItemStr) return false;
     
-    const cacheItem = JSON.parse(cacheItemStr) as CacheItem<any>;
+    const cacheItem = JSON.parse(cacheItemStr) as CacheItem<unknown>;
     const now = Date.now();
     return now < cacheItem.expiry;
   } catch (error) {

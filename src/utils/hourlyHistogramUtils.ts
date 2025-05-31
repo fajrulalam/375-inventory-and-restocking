@@ -6,11 +6,14 @@ import {
   where,
   getDocs,
   Timestamp,
-  getFirestore,
   orderBy,
   limit,
   onSnapshot,
+  Firestore,
+  QuerySnapshot,
+  DocumentData
 } from "firebase/firestore";
+// Removed unused import: getFirestore
 
 // Interface for hourly data
 export interface HourlyDataItem {
@@ -18,8 +21,20 @@ export interface HourlyDataItem {
   total: number; // Sum of item quantities from RecentlyServed
   pendingTotal: number; // Sum of item quantities from Status
   revenue: number; // Sum of order revenues
+  pendingRevenue?: number; // Sum of pending order revenues
   customerCount: number; // Count of unique customers
+  pendingCustomerCount?: number; // Count of unique customers with pending orders
+  items?: number; // Alias for total
+  pendingItems?: number; // Alias for pendingTotal
   isCurrent: boolean; // If this is the current hour
+}
+
+// Interface for hourly aggregate data used internally
+interface HourlyAggregate {
+  items: number;
+  pendingItems: number;
+  revenue: number;
+  customerNumbers: Set<string>;
 }
 
 // Interface for order item data
@@ -96,13 +111,6 @@ export const getCurrentHourJakarta = (): number => {
  * Initialize hourly aggregates map for hours from 8:00 to 16:00
  */
 const initializeHourlyAggregates = () => {
-  interface HourlyAggregate {
-    items: number;
-    pendingItems: number;
-    revenue: number;
-    customerNumbers: Set<string>;
-  }
-
   const hourlyAggregates: Record<string, HourlyAggregate> = {};
   for (let i = 8; i < 16; i++) {
     hourlyAggregates[`${i}:00-${i + 1}:00`] = {
@@ -118,8 +126,11 @@ const initializeHourlyAggregates = () => {
 /**
  * Process served orders data and update hourly aggregates
  */
-const processServedOrdersData = (querySnapshot: any, hourlyAggregates: any) => {
-  querySnapshot.forEach((doc: any) => {
+const processServedOrdersData = (
+  querySnapshot: QuerySnapshot<DocumentData>,
+  hourlyAggregates: Record<string, HourlyAggregate>
+) => {
+  querySnapshot.forEach((doc) => {
     const data = doc.data();
 
     // Check if timestampServe exists
@@ -142,7 +153,7 @@ const processServedOrdersData = (querySnapshot: any, hourlyAggregates: any) => {
 
         // Aggregate data
         if (Array.isArray(data.orderItems)) {
-          data.orderItems.forEach((item: any) => {
+          data.orderItems.forEach((item) => {
             if (item.quantity) {
               hourlyAggregates[hourKey].items += item.quantity;
             }
@@ -167,14 +178,14 @@ const processServedOrdersData = (querySnapshot: any, hourlyAggregates: any) => {
  * Only include pending orders (not completed/cancelled) from today
  */
 const processPendingOrdersData = (
-  querySnapshot: any,
-  hourlyAggregates: any
+  querySnapshot: QuerySnapshot<DocumentData>,
+  hourlyAggregates: Record<string, HourlyAggregate>
 ) => {
   // Get start of day timestamp
   const startOfDay = getJakartaStartOfDay();
   const startOfDayMs = startOfDay.toDate().getTime();
 
-  querySnapshot.forEach((doc: any) => {
+  querySnapshot.forEach((doc) => {
     const data = doc.data();
 
     // Only process orders that are not completed or cancelled
@@ -212,7 +223,7 @@ const processPendingOrdersData = (
 
         // Aggregate data
         if (Array.isArray(data.orderItems)) {
-          data.orderItems.forEach((item: any) => {
+          data.orderItems.forEach((item) => {
             const totalQuantity =
               (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0);
             if (totalQuantity > 0) {
@@ -231,7 +242,7 @@ const processPendingOrdersData = (
  * Convert hourly aggregates to HourlyDataItem array
  */
 const convertToHourlyDataItems = (
-  hourlyAggregates: any,
+  hourlyAggregates: Record<string, HourlyAggregate>,
   currentHour: number
 ): HourlyDataItem[] => {
   // Convert map to array of HourlyDataItem
@@ -262,7 +273,7 @@ const convertToHourlyDataItems = (
  * @param setPendingOrders State setter for pending orders
  */
 export const setupRealtimeUpdates = (
-  db: any,
+  db: Firestore,
   setHourlyData: (data: HourlyDataItem[]) => void,
   setServedOrders: (data: ServedOrderData[]) => void,
   setPendingOrders: (data: PendingOrderData[]) => void
@@ -319,10 +330,12 @@ export const setupRealtimeUpdates = (
 /**
  * Process served orders for UI display
  */
-const processServedOrdersForUI = (querySnapshot: any): ServedOrderData[] => {
+const processServedOrdersForUI = (
+  querySnapshot: QuerySnapshot<DocumentData>
+): ServedOrderData[] => {
   const servedOrders: ServedOrderData[] = [];
 
-  querySnapshot.forEach((doc: any) => {
+  querySnapshot.forEach((doc) => {
     const data = doc.data();
 
     // Process waktuPesan timestamp string
@@ -337,7 +350,7 @@ const processServedOrdersForUI = (querySnapshot: any): ServedOrderData[] => {
         : 0;
 
     const orderItems = Array.isArray(data.orderItems)
-      ? data.orderItems.map((item: any) => ({
+      ? data.orderItems.map((item) => ({
           namaPesanan: item.namaPesanan || "",
           quantity: item.quantity || 0,
           preparedQuantity: item.preparedQuantity || 0,
@@ -362,15 +375,17 @@ const processServedOrdersForUI = (querySnapshot: any): ServedOrderData[] => {
 /**
  * Process pending orders for UI display
  */
-const processPendingOrdersForUI = (querySnapshot: any): PendingOrderData[] => {
+const processPendingOrdersForUI = (
+  querySnapshot: QuerySnapshot<DocumentData>
+): PendingOrderData[] => {
   const pendingOrders: PendingOrderData[] = [];
 
-  querySnapshot.forEach((doc: any) => {
+  querySnapshot.forEach((doc) => {
     const data = doc.data();
 
     // Process order items to add orderType
     const orderItems = Array.isArray(data.orderItems)
-      ? data.orderItems.map((item: any) => ({
+      ? data.orderItems.map((item) => ({
           namaPesanan: item.namaPesanan || "",
           dineInQuantity: item.dineInQuantity || 0,
           takeAwayQuantity: item.takeAwayQuantity || 0,
@@ -399,7 +414,7 @@ const processPendingOrdersForUI = (querySnapshot: any): PendingOrderData[] => {
  * Update hourly histogram data by fetching both collections
  */
 export const updateHourlyHistogramData = async (
-  db: any,
+  db: Firestore,
   setHourlyData: (data: HourlyDataItem[]) => void
 ) => {
   try {
@@ -445,7 +460,7 @@ export const updateHourlyHistogramData = async (
  * @returns Array of hourly data items
  */
 export const fetchTodayHourlyData = async (
-  db: any
+  db: Firestore
 ): Promise<HourlyDataItem[]> => {
   try {
     // Start of day in Jakarta time
@@ -564,7 +579,7 @@ export const calculateTimeDiffMinutes = (start: Date, end: Date): number => {
  * @returns Array of served order data
  */
 export const fetchTodayServedOrders = async (
-  db: any
+  db: Firestore
 ): Promise<ServedOrderData[]> => {
   try {
     // Start of day in Jakarta time
@@ -593,7 +608,7 @@ export const fetchTodayServedOrders = async (
  * @returns Array of pending order data
  */
 export const fetchPendingOrders = async (
-  db: any
+  db: Firestore
 ): Promise<PendingOrderData[]> => {
   try {
     // Query Status collection for pending orders

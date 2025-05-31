@@ -14,7 +14,7 @@ const maskNumber = (value: number): string => {
 };
 
 interface TransactionData {
-  [key: string]: any;
+  [key: string]: number | string | boolean | null | Record<string, unknown>;
   total: number;
 }
 
@@ -251,7 +251,11 @@ export default function TransactionTile({
                       ? hideNumbers
                         ? maskNumber(value)
                         : value.toLocaleString()
-                      : value}
+                      : typeof value === "string" || typeof value === "boolean"
+                        ? String(value)
+                        : typeof value === "object" && value !== null
+                          ? "[Object]"
+                          : String(value)}
                   </span>
                   <span className="font-semibold text-right text-gray-500">
                     {itemMedians && typeof itemMedians[key] === 'number'
