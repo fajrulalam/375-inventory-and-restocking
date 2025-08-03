@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import Image from "next/image";
+import Link from "next/link";
 import { initializeApp } from "firebase/app";
 import TransactionTile from "@/components/TransactionTile";
 import HourlyHistogramTile from "@/components/HourlyHistogramTile";
@@ -420,8 +421,29 @@ export default function Home() {
             />
             Transaction Overview
           </h1>
-          <button
-            onClick={toggleHideNumbers}
+          <div className="flex gap-3 items-center">
+            <Link
+              href="/analyse"
+              className="flex items-center px-4 py-2 text-sm font-semibold rounded-xl text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all duration-200 shadow-sm"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 mr-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              Historical Analysis
+            </Link>
+            <button
+              onClick={toggleHideNumbers}
             className="flex items-center px-4 py-2 text-sm font-medium border-2 border-red-500 rounded-lg shadow-sm text-black bg-white hover:bg-red-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 transition-all duration-150 ease-in-out transform hover:scale-105"
           >
             {hideNumbers ? (
@@ -467,6 +489,7 @@ export default function Home() {
               </>
             )}
           </button>
+          </div>
         </div>
 
         {/* Transaction Tiles Grid */}
