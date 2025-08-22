@@ -74,7 +74,7 @@ export default function AnalyseHistoricalData() {
 
   useEffect(() => {
     loadData(selectedDays);
-  }, [selectedDays]);
+  }, [selectedDays]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply filter when filter state changes
   useEffect(() => {
