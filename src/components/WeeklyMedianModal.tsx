@@ -16,6 +16,7 @@ interface WeeklyMedianModalProps {
   dayName: string;
   median: number;
   calculationData: MedianCalculationData[];
+  isFiltered?: boolean;
 }
 
 export default function WeeklyMedianModal({
@@ -23,7 +24,8 @@ export default function WeeklyMedianModal({
   onClose,
   dayName,
   median,
-  calculationData
+  calculationData,
+  isFiltered = false
 }: WeeklyMedianModalProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -86,7 +88,7 @@ export default function WeeklyMedianModal({
               {dayName} Median Calculation
             </h3>
             <p className="text-lg text-blue-600 font-semibold mt-1">
-              Median: {median > 0 ? formatCurrency(median) : 'No data'}
+              Median: {median > 0 ? (isFiltered ? median.toString() : formatCurrency(median)) : 'No data'}
             </p>
             <p className="text-sm text-gray-600 mt-1">
               Based on {calculationData.length} {dayName}{calculationData.length !== 1 ? 's' : ''}
@@ -141,7 +143,7 @@ export default function WeeklyMedianModal({
                     </div>
                   </div>
                   <span className="text-green-600 font-semibold">
-                    {formatCurrency(item.total)}
+                    {isFiltered ? item.total.toString() : formatCurrency(item.total)}
                   </span>
                 </div>
               ))}

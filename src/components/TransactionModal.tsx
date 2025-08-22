@@ -142,7 +142,7 @@ export default function TransactionModal({
                 {formatDateLong(tile.date)}
               </h3>
               <div className="text-3xl font-bold text-emerald-600">
-                {formatCurrency(tile.total)}
+                {formatCurrency(tile.originalTotal)}
               </div>
             </div>
             

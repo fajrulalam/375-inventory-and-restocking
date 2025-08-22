@@ -6,11 +6,13 @@ import { formatCurrency } from "@/utils/formatters";
 interface DailyTransactionListItemProps {
   tile: DailyTileData;
   onClick: () => void;
+  isFiltered?: boolean;
 }
 
 export default function DailyTransactionListItem({
   tile,
-  onClick
+  onClick,
+  isFiltered = false
 }: DailyTransactionListItemProps) {
   // Format date as "EEE, dd MMM"
   const formatDateShort = (dateString: string) => {
@@ -38,12 +40,17 @@ export default function DailyTransactionListItem({
                  {tile.customerNumber} customers
               </div>
             )}
+            {tile.voucherCount > 0 && (
+              <div className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                {tile.voucherCount} voucher{tile.voucherCount !== 1 ? 's' : ''}
+              </div>
+            )}
           </div>
         </div>
         
         <div className="text-right">
           <div className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-            {formatCurrency(tile.total)}
+            {isFiltered ? tile.total.toString() : formatCurrency(tile.total)}
           </div>
         </div>
         

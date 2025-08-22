@@ -7,13 +7,15 @@ interface WeeklyMedianCardProps {
   median: number;
   isLoading: boolean;
   onClick?: () => void;
+  isFiltered?: boolean;
 }
 
 export default function WeeklyMedianCard({
   dayName,
   median,
   isLoading,
-  onClick
+  onClick,
+  isFiltered = false
 }: WeeklyMedianCardProps) {
   const abbreviatedDay = dayName.slice(0, 3);
 
@@ -33,7 +35,7 @@ export default function WeeklyMedianCard({
           <div className="h-8 bg-gray-200 animate-pulse rounded-lg"></div>
         ) : (
           <div className="text-xl font-bold text-slate-800">
-            {median > 0 ? formatCurrency(median) : '—'}
+            {median > 0 ? (isFiltered ? median.toString() : formatCurrency(median)) : '—'}
           </div>
         )}
       </div>

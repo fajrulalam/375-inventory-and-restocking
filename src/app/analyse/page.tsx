@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getFirestore } from "firebase/firestore";
 import { initializeApp } from "firebase/app";
 import Image from "next/image";
@@ -11,12 +11,16 @@ import WeeklyMedianCard from "@/components/WeeklyMedianCard";
 import TransactionModal from "@/components/TransactionModal";
 import WeeklyMedianModal from "@/components/WeeklyMedianModal";
 import BoxPlotModal from "@/components/BoxPlotModal";
+import ItemFilter from "@/components/ItemFilter";
 import { firebaseConfig } from "@/config/firebase";
 import {
   fetchAnalysisData,
+  transformToTileDataWithFilter,
+  calculateWeeklyMediansWithFilter,
   DailyTileData,
   WeeklyMedianData,
-  DateRange
+  DateRange,
+  DailyTransactionData
 } from "@/utils/analysisDataUtils";
 
 // Initialize Firebase
@@ -34,14 +38,21 @@ export default function AnalyseHistoricalData() {
   const [selectedWeeklyMedian, setSelectedWeeklyMedian] = useState<WeeklyMedianData | null>(null);
   const [isWeeklyModalOpen, setIsWeeklyModalOpen] = useState(false);
   const [isBoxPlotModalOpen, setIsBoxPlotModalOpen] = useState(false);
+  const [availableItems, setAvailableItems] = useState<string[]>([]);
+  const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [isFilterDisabled, setIsFilterDisabled] = useState(false);
+  const [rawTransactions, setRawTransactions] = useState<DailyTransactionData[]>([]);
 
   const loadData = async (days: number) => {
     setIsLoading(true);
     try {
       const result = await fetchAnalysisData(db, days);
-      setDailyTiles(result.dailyTiles);
-      setWeeklyMedians(result.weeklyMedians);
+      setRawTransactions(result.rawTransactions || []);
       setDateRange(result.dateRange);
+      setAvailableItems(result.availableItems);
+      
+      // Apply current filter
+      applyFilter(result.rawTransactions || []);
     } catch (error) {
       console.error("Error loading analysis data:", error);
     } finally {
@@ -49,9 +60,28 @@ export default function AnalyseHistoricalData() {
     }
   };
 
+  const applyFilter = useCallback((transactions: DailyTransactionData[]) => {
+    if (isFilterDisabled || !selectedItem) {
+      // No filter applied - use original data processing
+      setDailyTiles(transformToTileDataWithFilter(transactions));
+      setWeeklyMedians(calculateWeeklyMediansWithFilter(transactions));
+    } else {
+      // Apply filter
+      setDailyTiles(transformToTileDataWithFilter(transactions, selectedItem));
+      setWeeklyMedians(calculateWeeklyMediansWithFilter(transactions, selectedItem));
+    }
+  }, [isFilterDisabled, selectedItem]);
+
   useEffect(() => {
     loadData(selectedDays);
   }, [selectedDays]);
+
+  // Apply filter when filter state changes
+  useEffect(() => {
+    if (rawTransactions.length > 0) {
+      applyFilter(rawTransactions);
+    }
+  }, [selectedItem, isFilterDisabled, rawTransactions, applyFilter]);
 
   const handleTileClick = (tile: DailyTileData) => {
     setSelectedTile(tile);
@@ -83,6 +113,17 @@ export default function AnalyseHistoricalData() {
 
   const handleDaysChange = (days: number) => {
     setSelectedDays(days);
+  };
+
+  const handleItemChange = (item: string | null) => {
+    setSelectedItem(item);
+  };
+
+  const handleFilterDisabledChange = (disabled: boolean) => {
+    setIsFilterDisabled(disabled);
+    if (disabled) {
+      setSelectedItem(null);
+    }
   };
 
   return (
@@ -132,6 +173,17 @@ export default function AnalyseHistoricalData() {
           />
         </div>
 
+        {/* Item Filter Section */}
+        <div className="mb-12">
+          <ItemFilter
+            items={availableItems}
+            selectedItem={selectedItem}
+            onItemChange={handleItemChange}
+            isDisabled={isFilterDisabled}
+            onDisabledChange={handleFilterDisabledChange}
+          />
+        </div>
+
         {/* Weekly Median Cards */}
         <div className="mb-12">
           <div className="flex justify-between items-center mb-6">
@@ -154,6 +206,7 @@ export default function AnalyseHistoricalData() {
                 median={weeklyData.median}
                 isLoading={isLoading}
                 onClick={() => handleWeeklyMedianClick(weeklyData)}
+                isFiltered={!isFilterDisabled && selectedItem !== null}
               />
             ))}
           </div>
@@ -180,6 +233,7 @@ export default function AnalyseHistoricalData() {
                   key={tile.date}
                   tile={tile}
                   onClick={() => handleTileClick(tile)}
+                  isFiltered={!isFilterDisabled && selectedItem !== null}
                 />
               ))}
             </div>
@@ -200,6 +254,7 @@ export default function AnalyseHistoricalData() {
           dayName={selectedWeeklyMedian?.dayName || ''}
           median={selectedWeeklyMedian?.median || 0}
           calculationData={selectedWeeklyMedian?.calculationData || []}
+          isFiltered={!isFilterDisabled && selectedItem !== null}
         />
 
         {/* Box Plot Modal */}
