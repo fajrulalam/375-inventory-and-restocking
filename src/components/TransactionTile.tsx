@@ -130,7 +130,7 @@ export default function TransactionTile({
       console.log(`Unsubscribing from ${collectionName}/${documentId}`);
       unsubscribe();
     };
-  }, [collectionName, documentId, isLoading]);
+  }, [collectionName, documentId]); // Removed isLoading from dependencies to prevent infinite loop
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint
   const [isHistoricalModalOpen, setIsHistoricalModalOpen] = useState(false);
@@ -153,14 +153,17 @@ export default function TransactionTile({
       <div
         className={`
           p-6 rounded-lg shadow-md bg-white 
-          transition-all duration-200 
+          transition-shadow transition-colors duration-200 
           flex flex-col gap-2
           ${isUpdated ? "animate-tile-update" : ""}
         `}
       >
         <h2 className="text-lg font-semibold text-gray-700">{title}</h2>
         {isLoading ? (
-          <div className="animate-pulse h-8 bg-gray-200 rounded"></div>
+          <div className="flex flex-col gap-2">
+            <div className="animate-pulse h-8 bg-gray-200 rounded w-1/2"></div>
+            <div className="animate-pulse h-4 bg-gray-200 rounded w-3/4"></div>
+          </div>
         ) : data ? (
           <>
             <div
@@ -220,10 +223,9 @@ export default function TransactionTile({
         >
           <div
             className={`
-              ${
-                isDesktop
-                  ? "bg-white/80 backdrop-blur-md rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh]"
-                  : "fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md rounded-t-2xl max-h-[80vh] w-full"
+              ${isDesktop
+                ? "bg-white/80 backdrop-blur-md rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh]"
+                : "fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md rounded-t-2xl max-h-[80vh] w-full"
               }
               p-6 overflow-y-auto transition-all duration-300 ease-in-out
             `}

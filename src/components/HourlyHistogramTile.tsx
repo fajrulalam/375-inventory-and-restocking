@@ -80,7 +80,7 @@ const HourlyHistogramTile = ({
     <div className="bg-white rounded-xl shadow-md p-6 h-full relative overflow-hidden">
       {/* Skeleton loader */}
       {isLoading && (
-        <div className="absolute inset-0 bg-white/80 z-20 flex justify-center items-center">
+        <div className="absolute inset-0 bg-white z-20 flex justify-center items-center">
           <div className="animate-pulse flex flex-col w-full gap-4">
             <div className="h-6 bg-gray-200 rounded w-3/4"></div>
             <div className="h-[200px] bg-gray-200 rounded w-full"></div>
@@ -142,10 +142,9 @@ const HourlyHistogramTile = ({
               key={type}
               onClick={() => setDataType(type)}
               className={`px-3 py-1 text-sm font-medium rounded-md transition-colors
-                ${
-                  dataType === type
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-gray-600 hover:bg-gray-300"
+                ${dataType === type
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-gray-600 hover:bg-gray-300"
                 }`}
             >
               {dataTypeLabels[type]}
