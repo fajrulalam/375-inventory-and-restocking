@@ -283,11 +283,6 @@ function normalizeAccount(source: string): AccountType {
   return "cash";
 }
 
-const MONTH_ABBR = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 export function formatDayLabel(dateStr: string): string {
   const [yyyy, mm, dd] = dateStr.split("-");
   return `${parseInt(dd)}/${parseInt(mm)}/${yyyy}`;

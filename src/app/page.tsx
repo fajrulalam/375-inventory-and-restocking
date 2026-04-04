@@ -67,7 +67,7 @@ export default function Home() {
   const [yearlyHistoricalData, setYearlyHistoricalData] = useState<
     HistoricalDataItem[]
   >([]);
-  const [currentWeekday, setCurrentWeekday] = useState<string>(() => {
+  const [currentWeekday] = useState<string>(() => {
     const jakartaOptions: Intl.DateTimeFormatOptions = {
       weekday: "long",
       timeZone: "Asia/Jakarta",
