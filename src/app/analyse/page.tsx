@@ -22,12 +22,14 @@ import {
   DateRange,
   DailyTransactionData
 } from "@/utils/analysisDataUtils";
+import { useTestingMode } from "@/contexts/TestingModeContext";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function AnalyseHistoricalData() {
+  const { isTestingMode } = useTestingMode();
   const [dailyTiles, setDailyTiles] = useState<DailyTileData[]>([]);
   const [weeklyMedians, setWeeklyMedians] = useState<WeeklyMedianData[]>([]);
   const [selectedDays, setSelectedDays] = useState<number>(14);
@@ -74,7 +76,7 @@ export default function AnalyseHistoricalData() {
 
   useEffect(() => {
     loadData(selectedDays);
-  }, [selectedDays]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDays, isTestingMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply filter when filter state changes
   useEffect(() => {

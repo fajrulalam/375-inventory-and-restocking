@@ -3,11 +3,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import Image from "next/image";
-import Link from "next/link";
 import { initializeApp } from "firebase/app";
 import TransactionTile from "@/components/TransactionTile";
 import HourlyHistogramTile from "@/components/HourlyHistogramTile";
 import ServedOrdersTile from "@/components/ServedOrdersTile";
+import Sidebar from "@/components/Sidebar";
 import {
   getFormattedDate,
   getFormattedMonth,
@@ -32,6 +32,8 @@ import {
   setupRealtimeUpdates,
 } from "@/utils/hourlyHistogramUtils";
 import { firebaseConfig } from "@/config/firebase";
+import { useTestingMode } from "@/contexts/TestingModeContext";
+import { getCollectionPath } from "@/utils/testingMode";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -85,6 +87,10 @@ export default function Home() {
   const [isLoadingHourlyData, setIsLoadingHourlyData] = useState(true);
   const [isLoadingServedOrders, setIsLoadingServedOrders] = useState(true);
   const [isLoadingPendingOrders, setIsLoadingPendingOrders] = useState(true);
+
+  const { isTestingMode, toggleTestingMode } = useTestingMode();
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Toggle state for hiding/showing numbers
   const [hideNumbers, setHideNumbers] = useState(false);
@@ -167,7 +173,7 @@ export default function Home() {
         const currentYearFormatted = getFormattedYear(today);
 
         // Daily
-        const dailyRef = doc(db, "DailyTransaction", todayFormatted);
+        const dailyRef = doc(db, getCollectionPath("DailyTransaction"), todayFormatted);
         const dailySnap = await getDoc(dailyRef);
         const dailyTransactionData = dailySnap.exists()
           ? (dailySnap.data() as TransactionData)
@@ -188,7 +194,7 @@ export default function Home() {
         }
 
         // Monthly
-        const monthlyRef = doc(db, "MonthlyTransaction", currentMonthFormatted);
+        const monthlyRef = doc(db, getCollectionPath("MonthlyTransaction"), currentMonthFormatted);
         const monthlySnap = await getDoc(monthlyRef);
         const monthlyTransactionData = monthlySnap.exists()
           ? (monthlySnap.data() as TransactionData)
@@ -209,7 +215,7 @@ export default function Home() {
         }
 
         // Yearly
-        const yearlyRef = doc(db, "YearlyTransaction", currentYearFormatted);
+        const yearlyRef = doc(db, getCollectionPath("YearlyTransaction"), currentYearFormatted);
         const yearlySnap = await getDoc(yearlyRef);
         const yearlyTransactionData = yearlySnap.exists()
           ? (yearlySnap.data() as TransactionData)
@@ -248,8 +254,9 @@ export default function Home() {
       setIsLoadingMedianData(true);
       try {
         // Check if we have cached data first
-        const medianCacheKey = `daily-historical-data-${currentWeekday}`;
-        const historicalCacheKey = `historical-daily-${currentWeekday}`;
+        const cachePrefix = isTestingMode ? "test_" : "";
+        const medianCacheKey = `${cachePrefix}daily-historical-data-${currentWeekday}`;
+        const historicalCacheKey = `${cachePrefix}historical-daily-${currentWeekday}`;
 
         const cachedMedianData = getCache<number[]>(medianCacheKey);
         const cachedHistoricalData =
@@ -282,7 +289,7 @@ export default function Home() {
             if (foundDates >= 8) break; // Stop once we have 8 dates
 
             // Get transactions for the previous date
-            const docRef = doc(db, "DailyTransaction", date);
+            const docRef = doc(db, getCollectionPath("DailyTransaction"), date);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
@@ -336,8 +343,8 @@ export default function Home() {
       setIsLoadingMonthlyHistory(true);
       try {
         // Check cache first
-        const cacheKey = "monthly-historical-data";
-        const cachedData = getCache<HistoricalDataItem[]>(cacheKey);
+        const monthlyCacheKey = `${isTestingMode ? "test_" : ""}monthly-historical-data`;
+        const cachedData = getCache<HistoricalDataItem[]>(monthlyCacheKey);
 
         if (cachedData) {
           console.log("Using cached monthly historical data");
@@ -347,9 +354,8 @@ export default function Home() {
           const data = await fetchMonthlyHistoricalData(db);
           setMonthlyHistoricalData(data);
 
-          // Cache the data if we found any
           if (data.length > 0) {
-            setCache(cacheKey, data);
+            setCache(monthlyCacheKey, data);
           }
         }
       } catch (error) {
@@ -363,20 +369,19 @@ export default function Home() {
       setIsLoadingYearlyHistory(true);
       try {
         // Check cache first
-        const cacheKey = "yearly-historical-data";
-        const cachedData = getCache<HistoricalDataItem[]>(cacheKey);
+        const yearlyCacheKey = `${isTestingMode ? "test_" : ""}yearly-historical-data`;
+        const cachedYearlyData = getCache<HistoricalDataItem[]>(yearlyCacheKey);
 
-        if (cachedData) {
+        if (cachedYearlyData) {
           console.log("Using cached yearly historical data");
-          setYearlyHistoricalData(cachedData);
+          setYearlyHistoricalData(cachedYearlyData);
         } else {
           console.log("Fetching yearly historical data from Firestore");
           const data = await fetchYearlyHistoricalData(db);
           setYearlyHistoricalData(data);
 
-          // Cache the data if we found any
           if (data.length > 0) {
-            setCache(cacheKey, data);
+            setCache(yearlyCacheKey, data);
           }
         }
       } catch (error) {
@@ -394,7 +399,7 @@ export default function Home() {
 
     // Set up real-time updates for hourly data, served orders, and pending orders
     return setupDataUpdates();
-  }, [today, currentWeekday]);
+  }, [today, currentWeekday, isTestingMode]);
 
   // Calculate medians for monthly and yearly data using last 8 data points
   const monthlyMedian =
@@ -407,114 +412,67 @@ export default function Home() {
       : null;
 
   return (
-    <div className="min-h-screen bg-white text-black">
-      {" "}
-      {/* Main container: white background, black text */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header Section */}
-        <div className="flex justify-between items-center mb-10 pb-6 border-b border-gray-300">
-          {" "}
-          {/* Increased bottom margin and padding, lighter border */}
-          <h1 className="text-2xl font-semibold text-gray-800 dark:text-white flex items-center">
-            <Image
-              src="/assets/375_logo.png"
-              alt="375 Logo"
-              width={32}
-              height={32}
-              className="mr-3"
-            />
-            Transaction Overview
-          </h1>
-          <div className="flex gap-3 items-center">
-            <Link
-              href="/reviews"
-              className="flex items-center px-4 py-2 text-sm font-semibold rounded-xl text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all duration-200 shadow-sm"
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Header */}
+        <header className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-xl text-gray-500 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all duration-150"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
               </svg>
-              Feedbacks
-            </Link>
-            <Link
-              href="/analyse"
-              className="flex items-center px-4 py-2 text-sm font-semibold rounded-xl text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all duration-200 shadow-sm"
+            </button>
+            <Image src="/assets/375_logo.png" alt="375 Logo" width={28} height={28} />
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Transaction Overview</h1>
+              <p className="text-xs text-gray-400">{currentWeekday}, {getFormattedDate(today)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTestingMode}
+              className={`p-2 rounded-xl border transition-all duration-200 ${
+                isTestingMode
+                  ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-300 ring-offset-1 shadow-sm"
+                  : "text-gray-400 bg-white border-gray-100 hover:text-gray-600 hover:border-gray-200 shadow-sm"
+              }`}
+              title={isTestingMode ? "Testing mode ON" : "Testing mode OFF"}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5">
+                <path fillRule="evenodd" d="M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 013.55.621l.502.164a12.826 12.826 0 003.78.596 8.65 8.65 0 01-6.373-.1l-.331-.125a6.75 6.75 0 00-2.94-.423L2.785 14.07c-.163.163-.163.427 0 .59l2.424 2.424c.164.164.428.164.591 0l3.072-3.072a2.75 2.75 0 011.944-.806h4.644A2.5 2.5 0 0018 10.75V9.5a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586L8.5 3.528z" clipRule="evenodd" />
               </svg>
-              Historical Analysis
-            </Link>
+            </button>
             <button
               onClick={toggleHideNumbers}
-              className="flex items-center px-4 py-2 text-sm font-medium border-2 border-red-500 rounded-lg shadow-sm text-black bg-white hover:bg-red-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 transition-all duration-150 ease-in-out transform hover:scale-105"
+              className={`p-2 rounded-xl border transition-all duration-200 shadow-sm ${
+                hideNumbers
+                  ? "bg-gray-800 text-white border-gray-800"
+                  : "text-gray-400 bg-white border-gray-100 hover:text-gray-600 hover:border-gray-200"
+              }`}
+              title={hideNumbers ? "Show values" : "Hide values"}
             >
               {hideNumbers ? (
-                <>
-                  <svg // Eye-slash icon
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2" // Added margin for better spacing
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                    />
-                  </svg>
-                  Hide Values
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5">
+                  <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.185A10.004 10.004 0 009.999 3a9.956 9.956 0 00-4.744 1.194L3.28 2.22zM7.752 6.69l1.092 1.092a2.5 2.5 0 013.374 3.373l1.091 1.092a4 4 0 00-5.557-5.557z" clipRule="evenodd" />
+                  <path d="M10.748 13.93l2.523 2.523a9.987 9.987 0 01-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 010-1.186A10.007 10.007 0 012.839 6.02L6.07 9.252a4 4 0 004.678 4.678z" />
+                </svg>
               ) : (
-                <>
-                  <svg // Eye icon
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2" // Added margin for better spacing
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                    />
-                  </svg>
-                  Show Values
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4.5 h-4.5">
+                  <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                  <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                </svg>
               )}
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Transaction Tiles Grid */}
-        {/* Added a bit more gap for a cleaner look */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Transaction Tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           <TransactionTile
             title="Today's Transactions"
             data={dailyData}
@@ -522,16 +480,14 @@ export default function Home() {
             hideNumbers={hideNumbers}
             subtitle={
               medianData
-                ? `Median (last 8 ${currentWeekday}s): ${formatCurrency(
-                  medianData
-                )}`
+                ? `Median (last 8 ${currentWeekday}s): ${formatCurrency(medianData)}`
                 : undefined
             }
             isLoadingSubtitle={isLoadingMedianData}
             historicalData={dailyHistoricalData}
             periodType="daily"
             periodLabel={currentWeekday}
-            yAxisInterval={100000} // 100k intervals for daily chart
+            yAxisInterval={100000}
             collectionName="DailyTransaction"
             documentId={getFormattedDate(today)}
             itemMedians={dailyItemMedians || {}}
@@ -543,15 +499,14 @@ export default function Home() {
             hideNumbers={hideNumbers}
             subtitle={
               monthlyMedian && monthlyHistoricalData.length > 0
-                ? `Median (last ${monthlyHistoricalData.length
-                } months): ${formatCurrency(monthlyMedian)}`
+                ? `Median (last ${monthlyHistoricalData.length} months): ${formatCurrency(monthlyMedian)}`
                 : undefined
             }
             isLoadingSubtitle={isLoadingMonthlyHistory}
             historicalData={monthlyHistoricalData}
             periodType="monthly"
             periodLabel="Month"
-            yAxisInterval={2500000} // 2M intervals for monthly chart
+            yAxisInterval={2500000}
             collectionName="MonthlyTransaction"
             documentId={getFormattedMonth(today)}
             itemMedians={monthlyItemMedians || {}}
@@ -563,27 +518,26 @@ export default function Home() {
             hideNumbers={hideNumbers}
             subtitle={
               yearlyMedian && yearlyHistoricalData.length > 0
-                ? `Median (${yearlyHistoricalData.length
-                } years): ${formatCurrency(yearlyMedian)}`
+                ? `Median (${yearlyHistoricalData.length} years): ${formatCurrency(yearlyMedian)}`
                 : undefined
             }
             isLoadingSubtitle={isLoadingYearlyHistory}
             historicalData={yearlyHistoricalData}
             periodType="yearly"
             periodLabel="Year"
-            yAxisInterval={50000000} // 5M intervals for yearly chart
+            yAxisInterval={50000000}
             collectionName="YearlyTransaction"
             documentId={getFormattedYear(today)}
             itemMedians={yearlyItemMedians || {}}
           />
         </div>
 
-        {/* Hourly Histogram Row */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Hourly Data Row */}
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
           <HourlyHistogramTile
             data={hourlyData}
             isLoading={isLoadingHourlyData}
-            yAxisInterval={15} // 15 items intervals for hourly chart
+            yAxisInterval={15}
           />
           <ServedOrdersTile
             title="Today's Orders"

@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { TestingModeProvider } from "@/contexts/TestingModeContext";
+import AuthGate from "@/components/AuthGate";
 
-// Viewport configuration
 export const viewport: Viewport = {
   themeColor: '#ffffff',
   width: 'device-width',
@@ -24,15 +26,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "375 Dashboard",
   description: "Created by 375 Technology",
-  metadataBase: new URL('http://localhost:3000'), // Replace with your production URL
+  metadataBase: new URL('http://localhost:3000'),
   manifest: '/site.webmanifest',
   icons: {
-    icon: [
-      { url: '/assets/375_logo.png', type: 'image/png' },
-    ],
-    apple: [
-      { url: '/assets/375_logo.png', type: 'image/png' },
-    ],
+    icon: [{ url: '/assets/375_logo.png', type: 'image/png' }],
+    apple: [{ url: '/assets/375_logo.png', type: 'image/png' }],
   },
   appleWebApp: {
     capable: true,
@@ -44,14 +42,7 @@ export const metadata: Metadata = {
     siteName: '375 Dashboard',
     title: '375 Dashboard',
     description: '375 Inventory and Restocking Dashboard',
-    images: [
-      {
-        url: '/assets/375_logo.png',
-        width: 512,
-        height: 512,
-        alt: '375 Logo',
-      },
-    ],
+    images: [{ url: '/assets/375_logo.png', width: 512, height: 512, alt: '375 Logo' }],
   },
   twitter: {
     card: 'summary_large_image',
@@ -68,10 +59,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <AuthProvider>
+          <AuthGate>
+            <TestingModeProvider>
+              {children}
+            </TestingModeProvider>
+          </AuthGate>
+        </AuthProvider>
       </body>
     </html>
   );

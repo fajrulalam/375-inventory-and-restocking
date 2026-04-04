@@ -77,75 +77,35 @@ const HourlyHistogramTile = ({
   getTotals();
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 h-full relative overflow-hidden">
-      {/* Skeleton loader */}
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 h-full relative overflow-hidden">
       {isLoading && (
-        <div className="absolute inset-0 bg-white z-20 flex justify-center items-center">
+        <div className="absolute inset-0 bg-white z-20 flex justify-center items-center p-6">
           <div className="animate-pulse flex flex-col w-full gap-4">
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-[200px] bg-gray-200 rounded w-full"></div>
+            <div className="h-5 bg-gray-100 rounded-lg w-1/2"></div>
+            <div className="h-[200px] bg-gray-100 rounded-lg w-full"></div>
             <div className="flex justify-center gap-2">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-4 bg-gray-200 rounded w-10"></div>
+                <div key={i} className="h-3 bg-gray-100 rounded w-10"></div>
               ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Header & Toggle */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">
-            Hourly {dataTypeLabels[dataType]}
-          </h2>
-          {/* {!isLoading && (
-            <div className="text-sm text-gray-600">
-              {dataType === "total" ? (
-                <>
-                  <span className="font-medium text-indigo-700">{served}</span>{" "}
-                  served +
-                  <span className="font-medium text-gray-700 ml-1">
-                    {pending}
-                  </span>{" "}
-                  pending =
-                  <span className="font-medium text-black ml-1">{total}</span>{" "}
-                  total
-                </>
-              ) : dataType === "revenue" ? (
-                <>
-                  <span className="font-medium text-indigo-700">
-                    {formatCurrency(served)}
-                  </span>{" "}
-                  served +
-                  <span className="font-medium text-gray-700 ml-1">
-                    {formatCurrency(pending)}
-                  </span>{" "}
-                  in progress
-                </>
-              ) : (
-                <>
-                  <span className="font-medium text-indigo-700">{served}</span>{" "}
-                  served customers +
-                  <span className="font-medium text-gray-700 ml-1">
-                    {pending > 0 ? pending : 0}
-                  </span>{" "}
-                  waiting
-                </>
-              )}
-            </div>
-          )} */}
-        </div>
-        <div className="flex space-x-1 p-1 bg-gray-200 rounded-lg mt-2 sm:mt-0">
+        <h2 className="text-sm font-medium text-gray-500">
+          Hourly {dataTypeLabels[dataType]}
+        </h2>
+        <div className="flex p-0.5 bg-gray-100 rounded-lg mt-2 sm:mt-0">
           {(Object.keys(dataTypeLabels) as HistogramDataType[]).map((type) => (
             <button
               key={type}
               onClick={() => setDataType(type)}
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors
-                ${dataType === type
-                  ? "bg-white text-indigo-700 shadow-sm"
-                  : "text-gray-600 hover:bg-gray-300"
-                }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                dataType === type
+                  ? "bg-white text-gray-800 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
             >
               {dataTypeLabels[type]}
             </button>
@@ -153,8 +113,7 @@ const HourlyHistogramTile = ({
         </div>
       </div>
 
-      {/* Chart Content */}
-      <div className="h-[300px] mt-6 mb-4">
+      <div className="h-[300px] mt-4 mb-4">
         <HourlyHistogram
           data={data}
           maxYAxis={maxYAxis}
@@ -162,7 +121,7 @@ const HourlyHistogramTile = ({
           yAxisInterval={yAxisInterval}
           onHover={handleBarHover}
           hoveredBar={hoveredBar}
-          dataType={dataType} // Pass the current dataType
+          dataType={dataType}
         />
       </div>
     </div>

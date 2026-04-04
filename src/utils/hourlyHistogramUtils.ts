@@ -13,6 +13,7 @@ import {
   QuerySnapshot,
   DocumentData
 } from "firebase/firestore";
+import { getCollectionPath } from "./testingMode";
 // Removed unused import: getFirestore
 
 // Interface for hourly data
@@ -37,12 +38,22 @@ interface HourlyAggregate {
   customerNumbers: Set<string>;
 }
 
+// Interface for a selected option on an order item
+export interface SelectedOption {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  priceAdjustment: number;
+}
+
 // Interface for order item data
 export interface OrderItemData {
   namaPesanan: string;
   quantity: number;
   preparedQuantity: number;
   orderType: string;
+  selectedOptions?: SelectedOption[];
 }
 
 // Interface for served order data
@@ -50,6 +61,7 @@ export interface ServedOrderData {
   id: string;
   customerNumber: string;
   namaCustomer: string;
+  isMember: boolean;
   orderItems: OrderItemData[];
   waktuPesan: string; // Timestamp in string format
   timestampServe: Timestamp;
@@ -61,6 +73,7 @@ export interface PendingOrderData {
   id: string;
   customerNumber: string;
   namaCustomer: string;
+  isMember: boolean;
   orderItems: PendingOrderItemData[];
   waktuPesan: Timestamp; // Timestamp for order time
   status: string; // Current order status
@@ -75,6 +88,7 @@ export interface PendingOrderItemData {
   dineInQuantity: number;
   takeAwayQuantity: number;
   orderType?: string; // Calculated field
+  selectedOptions?: SelectedOption[];
 }
 
 /**
@@ -282,7 +296,7 @@ export const setupRealtimeUpdates = (
   const startOfDay = getJakartaStartOfDay();
 
   // Set up listener for RecentlyServed collection
-  const recentlyServedRef = collection(db, "RecentlyServed");
+  const recentlyServedRef = collection(db, getCollectionPath("RecentlyServed"));
   const recentlyServedQuery = query(
     recentlyServedRef,
     where("timestampServe", ">=", startOfDay),
@@ -291,7 +305,7 @@ export const setupRealtimeUpdates = (
   );
 
   // Set up listener for Status collection
-  const statusRef = collection(db, "Status");
+  const statusRef = collection(db, getCollectionPath("Status"));
   const statusQuery = query(
     statusRef,
     orderBy("waktuPesan", "desc"),
@@ -355,6 +369,15 @@ const processServedOrdersForUI = (
           quantity: item.quantity || 0,
           preparedQuantity: item.preparedQuantity || 0,
           orderType: item.orderType || "dine-in",
+          selectedOptions: Array.isArray(item.selectedOptions)
+            ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
+                groupId: (opt.groupId as string) || "",
+                groupName: (opt.groupName as string) || "",
+                optionId: (opt.optionId as string) || "",
+                optionName: (opt.optionName as string) || "",
+                priceAdjustment: (opt.priceAdjustment as number) || 0,
+              }))
+            : [],
         }))
       : [];
 
@@ -362,6 +385,7 @@ const processServedOrdersForUI = (
       id: doc.id,
       customerNumber: data.customerNumber || "",
       namaCustomer: data.namaCustomer || "",
+      isMember: data.isMember === true,
       orderItems,
       waktuPesan: data.waktuPesan || "",
       timestampServe: data.timestampServe,
@@ -389,8 +413,16 @@ const processPendingOrdersForUI = (
           namaPesanan: item.namaPesanan || "",
           dineInQuantity: item.dineInQuantity || 0,
           takeAwayQuantity: item.takeAwayQuantity || 0,
-          // Determine the orderType based on quantities
           orderType: item.takeAwayQuantity > 0 ? "take-away" : "dine-in",
+          selectedOptions: Array.isArray(item.selectedOptions)
+            ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
+                groupId: (opt.groupId as string) || "",
+                groupName: (opt.groupName as string) || "",
+                optionId: (opt.optionId as string) || "",
+                optionName: (opt.optionName as string) || "",
+                priceAdjustment: (opt.priceAdjustment as number) || 0,
+              }))
+            : [],
         }))
       : [];
 
@@ -398,6 +430,7 @@ const processPendingOrdersForUI = (
       id: doc.id,
       customerNumber: data.customerNumber || "",
       namaCustomer: data.namaCustomer || "",
+      isMember: data.isMember === true,
       orderItems,
       waktuPesan: data.waktuPesan || new Timestamp(0, 0),
       status: data.status || "",
@@ -426,7 +459,7 @@ export const updateHourlyHistogramData = async (
     const hourlyAggregates = initializeHourlyAggregates();
 
     // Fetch RecentlyServed collection for today's items
-    const recentlyServedRef = collection(db, "RecentlyServed");
+    const recentlyServedRef = collection(db, getCollectionPath("RecentlyServed"));
     const recentlyServedQuery = query(
       recentlyServedRef,
       where("timestampServe", ">=", startOfDay)
@@ -437,7 +470,7 @@ export const updateHourlyHistogramData = async (
     processServedOrdersData(recentlyServedSnapshot, hourlyAggregates);
 
     // Fetch Status collection for pending orders
-    const statusRef = collection(db, "Status");
+    const statusRef = collection(db, getCollectionPath("Status"));
     const statusQuery = query(statusRef);
     const statusSnapshot = await getDocs(statusQuery);
 
@@ -471,7 +504,7 @@ export const fetchTodayHourlyData = async (
     const hourlyAggregates = initializeHourlyAggregates();
 
     // Fetch RecentlyServed collection for today's items
-    const recentlyServedRef = collection(db, "RecentlyServed");
+    const recentlyServedRef = collection(db, getCollectionPath("RecentlyServed"));
     const recentlyServedQuery = query(
       recentlyServedRef,
       where("timestampServe", ">=", startOfDay)
@@ -482,7 +515,7 @@ export const fetchTodayHourlyData = async (
     processServedOrdersData(recentlyServedSnapshot, hourlyAggregates);
 
     // Fetch Status collection for pending orders
-    const statusRef = collection(db, "Status");
+    const statusRef = collection(db, getCollectionPath("Status"));
     const statusQuery = query(statusRef);
     const statusSnapshot = await getDocs(statusQuery);
 
@@ -586,7 +619,7 @@ export const fetchTodayServedOrders = async (
     const startOfDay = getJakartaStartOfDay();
 
     // Query RecentlyServed collection for today's items
-    const recentlyServedRef = collection(db, "RecentlyServed");
+    const recentlyServedRef = collection(db, getCollectionPath("RecentlyServed"));
     const q = query(
       recentlyServedRef,
       where("timestampServe", ">=", startOfDay),
@@ -612,7 +645,7 @@ export const fetchPendingOrders = async (
 ): Promise<PendingOrderData[]> => {
   try {
     // Query Status collection for pending orders
-    const statusCollection = collection(db, "Status");
+    const statusCollection = collection(db, getCollectionPath("Status"));
     const q = query(
       statusCollection,
       // No timestamp filter as we want all pending orders regardless of when they were created

@@ -2,6 +2,7 @@
 
 import { Firestore, collection, query, getDocs, where } from "firebase/firestore";
 import { calculateMedian } from "./dateUtils";
+import { getCollectionPath } from "./testingMode";
 
 export interface DailyTransactionData {
   date: string;
@@ -95,7 +96,7 @@ export const fetchTransactionsByDateRange = async (
   dateRange: DateRange
 ): Promise<DailyTransactionData[]> => {
   try {
-    const transactionsCollection = collection(db, "DailyTransaction");
+    const transactionsCollection = collection(db, getCollectionPath("DailyTransaction"));
     
     // Create array of dates to query
     const dateStrings: string[] = [];

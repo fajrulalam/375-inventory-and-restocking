@@ -9,6 +9,7 @@ import {
   getDocs,
   Firestore
 } from "firebase/firestore";
+import { getCollectionPath } from "./testingMode";
 // Removed unused imports: Timestamp, getFirestore, getFormattedMonth, getFormattedYear
 
 export interface HistoricalDataItem {
@@ -235,7 +236,7 @@ export const calculateChartStatistics = (
 // Fetch monthly historical data
 export const fetchMonthlyHistoricalData = async (db: Firestore, count: number = 12): Promise<HistoricalDataItem[]> => {
   try {
-    const monthlyCollection = collection(db, "MonthlyTransaction");
+    const monthlyCollection = collection(db, getCollectionPath("MonthlyTransaction"));
     const q = query(
       monthlyCollection,
       orderBy("timestamp", "desc"),
@@ -265,7 +266,7 @@ export const fetchMonthlyHistoricalData = async (db: Firestore, count: number = 
 // Fetch yearly historical data
 export const fetchYearlyHistoricalData = async (db: Firestore): Promise<HistoricalDataItem[]> => {
   try {
-    const yearlyCollection = collection(db, "YearlyTransaction");
+    const yearlyCollection = collection(db, getCollectionPath("YearlyTransaction"));
     const q = query(
       yearlyCollection,
       orderBy("timestamp", "desc")
@@ -307,7 +308,7 @@ export const calculateItemMedians = async (
   const itemMedians: { [key: string]: number } = {};
 
   try {
-    const dataCollection = collection(db, collectionName);
+    const dataCollection = collection(db, getCollectionPath(collectionName));
     let q;
 
     if (collectionName === "DailyTransaction") {

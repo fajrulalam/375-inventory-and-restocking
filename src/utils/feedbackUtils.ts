@@ -8,6 +8,7 @@ import {
     doc,
     updateDoc,
 } from "firebase/firestore";
+import { getCollectionPath } from "./testingMode";
 
 export interface FeedbackData {
     id: string;
@@ -23,7 +24,7 @@ export const setupFeedbackUpdates = (
     onFeedbacksUpdate: (feedbacks: FeedbackData[]) => void
 ) => {
     const feedbacksQuery = query(
-        collection(db, "feedbacks"),
+        collection(db, getCollectionPath("feedbacks")),
         orderBy("timestamp", "desc")
     );
 
@@ -53,6 +54,6 @@ export const setupFeedbackUpdates = (
 };
 
 export const updateFeedbackStatus = async (db: Firestore, id: string, status: string) => {
-    const feedbackRef = doc(db, "feedbacks", id);
+    const feedbackRef = doc(db, getCollectionPath("feedbacks"), id);
     await updateDoc(feedbackRef, { status });
 };

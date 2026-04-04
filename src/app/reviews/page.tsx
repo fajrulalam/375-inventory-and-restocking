@@ -6,12 +6,14 @@ import Link from "next/link";
 import { getApps, getApp, initializeApp } from "firebase/app";
 import { firebaseConfig } from "@/config/firebase";
 import { setupFeedbackUpdates, FeedbackData, updateFeedbackStatus } from "@/utils/feedbackUtils";
+import { useTestingMode } from "@/contexts/TestingModeContext";
 
 // Initialize Firebase securely
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function ReviewsPage() {
+    const { isTestingMode } = useTestingMode();
     const [feedbacks, setFeedbacks] = useState<FeedbackData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function ReviewsPage() {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [isTestingMode]);
 
     // Core statuses that stay visible, plus any dynamic ones found in data
     const coreOrder = ["pending", "resolved", "spam", "all"];

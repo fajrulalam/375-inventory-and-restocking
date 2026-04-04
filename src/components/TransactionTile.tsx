@@ -6,6 +6,8 @@ import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import { formatCurrency } from "@/utils/formatters";
 import HistoricalDataModal from "./HistoricalDataModal";
 import { HistoricalDataItem, TimePeriod } from "@/utils/historicalDataUtils";
+import { useTestingMode } from "@/contexts/TestingModeContext";
+import { getCollectionPath } from "@/utils/testingMode";
 
 // Helper function to mask a number with asterisks
 const maskNumber = (value: number): string => {
@@ -50,6 +52,7 @@ export default function TransactionTile({
   documentId,
   itemMedians = {},
 }: TransactionTileProps) {
+  const { isTestingMode } = useTestingMode();
   const [data, setData] = useState<TransactionData | null>(initialData || null);
   const [isLoading, setIsLoading] = useState(initialLoading);
   const [isUpdated, setIsUpdated] = useState(false);
@@ -70,19 +73,20 @@ export default function TransactionTile({
   useEffect(() => {
     // Get Firestore instance
     const db = getFirestore();
+    const effectiveCollection = getCollectionPath(collectionName);
 
-    console.log(`Setting up listener for ${collectionName}/${documentId}`);
+    console.log(`Setting up listener for ${effectiveCollection}/${documentId}`);
     setIsLoading(true);
 
     // Create real-time listener
     const unsubscribe = onSnapshot(
-      doc(db, collectionName, documentId),
+      doc(db, effectiveCollection, documentId),
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const newData = docSnapshot.data() as TransactionData;
           console.log(
-            `Document updated: ${collectionName}/${documentId}`,
-            newData
+            `Document updated: ${effectiveCollection}/${documentId}`,
+            newData,
           );
 
           // Check if this is a real update (not initial load) and if the total has changed
@@ -109,7 +113,7 @@ export default function TransactionTile({
           setData(newData);
         } else {
           console.log(
-            `Document does not exist: ${collectionName}/${documentId}`
+            `Document does not exist: ${effectiveCollection}/${documentId}`,
           );
           previousTotalRef.current = 0;
           setData({ total: 0 });
@@ -118,19 +122,19 @@ export default function TransactionTile({
       },
       (error) => {
         console.error(
-          `Error listening to ${collectionName}/${documentId}:`,
-          error
+          `Error listening to ${effectiveCollection}/${documentId}:`,
+          error,
         );
         setIsLoading(false);
-      }
+      },
     );
 
     // Cleanup subscription on unmount
     return () => {
-      console.log(`Unsubscribing from ${collectionName}/${documentId}`);
+      console.log(`Unsubscribing from ${effectiveCollection}/${documentId}`);
       unsubscribe();
     };
-  }, [collectionName, documentId]); // Removed isLoading from dependencies to prevent infinite loop
+  }, [collectionName, documentId, isTestingMode]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint
   const [isHistoricalModalOpen, setIsHistoricalModalOpen] = useState(false);
@@ -142,6 +146,40 @@ export default function TransactionTile({
     "timestamp",
     "customerNumber",
     "total",
+    "takeAwayFee",
+    "closingQris",
+    "actualCash",
+    "actualQris",
+    "actualOnline",
+    "subTotal",
+    "expensesOnline",
+    "grossCash",
+    "expensesCash",
+    "totalQris",
+    "discrepancyCash",
+    "closingOnline",
+    "discrepancyOnline",
+    "grossOnline",
+    "expensesQris",
+    "discrepancyQris",
+    "grossQris",
+    "closingCash",
+    "totalCash",
+    "actualOnline",
+    "subTotal",
+    "expensesOnline",
+    "grossCash",
+    "expensesCash",
+    "totalQris",
+    "discrepancyCash",
+    "closingOnline",
+    "discrepancyOnline",
+    "grossOnline",
+    "expensesQris",
+    "discrepancyQris",
+    "grossQris",
+    "closingCash",
+    "totalCash",
   ];
 
   const filteredEntries = data
@@ -152,25 +190,24 @@ export default function TransactionTile({
     <>
       <div
         className={`
-          p-6 rounded-lg shadow-md bg-white 
-          transition-shadow transition-colors duration-200 
-          flex flex-col gap-2
+          px-5 py-5 rounded-xl border border-gray-100 shadow-sm bg-white
+          transition-all duration-200 flex flex-col gap-1.5
           ${isUpdated ? "animate-tile-update" : ""}
         `}
       >
-        <h2 className="text-lg font-semibold text-gray-700">{title}</h2>
+        <h2 className="text-sm font-medium text-gray-500">{title}</h2>
         {isLoading ? (
-          <div className="flex flex-col gap-2">
-            <div className="animate-pulse h-8 bg-gray-200 rounded w-1/2"></div>
-            <div className="animate-pulse h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="flex flex-col gap-2 mt-1">
+            <div className="animate-pulse h-9 bg-gray-100 rounded-lg w-2/3"></div>
+            <div className="animate-pulse h-3.5 bg-gray-100 rounded w-3/4"></div>
           </div>
         ) : data ? (
           <>
             <div
               onClick={() => data && setIsModalOpen(true)}
-              className={`${data ? "cursor-pointer hover:opacity-80" : ""}`}
+              className="cursor-pointer group"
             >
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-3xl font-bold text-gray-900 tracking-tight group-hover:text-gray-700 transition-colors">
                 {hideNumbers
                   ? `Rp ${maskNumber(data.total)}`
                   : formatCurrency(data.total)}
@@ -178,24 +215,19 @@ export default function TransactionTile({
             </div>
 
             {isLoadingSubtitle ? (
-              <div className="mt-1 animate-pulse h-4 bg-gray-200 rounded w-48"></div>
+              <div className="animate-pulse h-3.5 bg-gray-100 rounded w-48"></div>
             ) : (
               subtitle && (
-                <div
-                  className="inline-block"
-                  onClick={(e) => e.stopPropagation()}
+                <p
+                  className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 transition-colors"
+                  onClick={() => {
+                    if (historicalData && historicalData.length > 0) {
+                      setIsHistoricalModalOpen(true);
+                    }
+                  }}
                 >
-                  <p
-                    className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 hover:underline"
-                    onClick={() => {
-                      if (historicalData && historicalData.length > 0) {
-                        setIsHistoricalModalOpen(true);
-                      }
-                    }}
-                  >
-                    {subtitle}
-                  </p>
-                </div>
+                  {subtitle}
+                </p>
               )
             )}
             {historicalData && historicalData.length > 0 && (
@@ -211,44 +243,69 @@ export default function TransactionTile({
             )}
           </>
         ) : (
-          <p className="text-sm text-gray-500">No data available</p>
+          <p className="text-sm text-gray-400">No data available</p>
         )}
       </div>
 
-      {/* Responsive Modal (Bottom Sheet on Mobile, Dialog on Desktop) */}
+      {/* Breakdown Modal */}
       {isModalOpen && data && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/30"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
           onClick={() => setIsModalOpen(false)}
         >
           <div
             className={`
-              ${isDesktop
-                ? "bg-white/80 backdrop-blur-md rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh]"
-                : "fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md rounded-t-2xl max-h-[80vh] w-full"
+              ${
+                isDesktop
+                  ? "bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg w-full max-h-[90vh]"
+                  : "fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[80vh] w-full"
               }
-              p-6 overflow-y-auto transition-all duration-300 ease-in-out
+              overflow-y-auto transition-all duration-300 ease-in-out
             `}
             onClick={(e) => e.stopPropagation()}
           >
             {!isDesktop && (
-              <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-6" />
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3" />
             )}
-            <h3 className="text-xl font-bold mb-4">{title} Breakdown</h3>
-            {/* Header Row */}
-            <div className="grid grid-cols-3 gap-4 mb-2 pb-2 border-b font-semibold text-gray-700">
+
+            {/* Modal Header */}
+            <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">
+                {title} Breakdown
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Table Header */}
+            <div className="grid grid-cols-3 gap-4 px-6 py-2.5 bg-gray-50/80 text-xs font-semibold text-gray-400 uppercase tracking-wide">
               <div className="text-left">Item</div>
-              <div className="text-right">Quantity</div>
+              <div className="text-right">Qty</div>
               <div className="text-right">Median</div>
             </div>
-            <div className="space-y-3">
+
+            {/* Table Body */}
+            <div className="px-6 pb-6 divide-y divide-gray-100">
               {filteredEntries.map(([key, value]) => (
                 <div
                   key={key}
-                  className="grid grid-cols-3 gap-4 items-center border-b pb-2 last:border-b-0 last:pb-0"
+                  className="grid grid-cols-3 gap-4 items-center py-3"
                 >
-                  <span className="text-gray-600 capitalize text-left truncate">{key}</span>
-                  <span className="font-semibold text-right">
+                  <span className="text-sm text-gray-700 capitalize truncate">
+                    {key}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 text-right tabular-nums">
                     {typeof value === "number"
                       ? hideNumbers
                         ? maskNumber(value)
@@ -259,12 +316,12 @@ export default function TransactionTile({
                           ? "[Object]"
                           : String(value)}
                   </span>
-                  <span className="font-semibold text-right text-gray-500">
-                    {itemMedians && typeof itemMedians[key] === 'number'
+                  <span className="text-sm font-medium text-gray-400 text-right tabular-nums">
+                    {itemMedians && typeof itemMedians[key] === "number"
                       ? hideNumbers
                         ? maskNumber(itemMedians[key])
                         : itemMedians[key].toLocaleString()
-                      : '-'}
+                      : "-"}
                   </span>
                 </div>
               ))}
