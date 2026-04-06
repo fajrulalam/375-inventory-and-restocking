@@ -66,6 +66,7 @@ export interface ServedOrderData {
   waktuPesan: string; // Timestamp in string format
   timestampServe: Timestamp;
   serveTimeMinutes: number; // Time delta in minutes
+  total: number;
 }
 
 // Interface for pending order data
@@ -390,6 +391,7 @@ const processServedOrdersForUI = (
       waktuPesan: data.waktuPesan || "",
       timestampServe: data.timestampServe,
       serveTimeMinutes,
+      total: data.total || 0,
     });
   });
 

@@ -55,7 +55,7 @@ const HourlyHistogramTile = ({
   const { maxYAxis, yAxisTicks } = calculateHistogramStatistics(
     data,
     dataType,
-    effectiveYAxisInterval
+    effectiveYAxisInterval,
   );
 
   const handleBarHover = (item: HourlyDataItem | null, index: number) => {
@@ -69,7 +69,11 @@ const HourlyHistogramTile = ({
     const servedTotal = data.reduce((sum, item) => sum + item.total, 0);
     const pendingTotal = data.reduce((sum, item) => sum + item.pendingTotal, 0);
 
-    return { served: servedTotal, pending: pendingTotal, total: servedTotal + pendingTotal };
+    return {
+      served: servedTotal,
+      pending: pendingTotal,
+      total: servedTotal + pendingTotal,
+    };
   };
 
   // We're not using these values currently as the display is commented out

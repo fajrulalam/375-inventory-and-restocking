@@ -288,6 +288,65 @@ export default function TransactionTile({
               </button>
             </div>
 
+            {/* Payment Method Breakdown */}
+            {(() => {
+              const totalCash =
+                typeof data.totalCash === "number" ? data.totalCash : 0;
+              const totalQris =
+                typeof data.totalQris === "number" ? data.totalQris : 0;
+              const totalOnline =
+                typeof data.totalOnline === "number" ? data.totalOnline : 0;
+              const grandTotal = totalCash + totalQris + totalOnline;
+              const showBreakdown = grandTotal > 0;
+              const isYearly2026 =
+                periodType === "yearly" && documentId === "2026";
+
+              if (!showBreakdown) return null;
+
+              return (
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 rounded-lg px-3 py-3 text-center">
+                      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1">
+                        Cash
+                      </p>
+                      <p className="text-sm font-bold text-slate-700 tabular-nums">
+                        {hideNumbers
+                          ? `Rp ${maskNumber(totalCash)}`
+                          : formatCurrency(totalCash)}
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg px-3 py-3 text-center">
+                      <p className="text-[11px] font-medium text-blue-400 uppercase tracking-wide mb-1">
+                        QRIS{isYearly2026 ? "*" : ""}
+                      </p>
+                      <p className="text-sm font-bold text-blue-700 tabular-nums">
+                        {hideNumbers
+                          ? `Rp ${maskNumber(totalQris)}`
+                          : formatCurrency(totalQris)}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg px-3 py-3 text-center">
+                      <p className="text-[11px] font-medium text-purple-400 uppercase tracking-wide mb-1">
+                        Online{isYearly2026 ? "*" : ""}
+                      </p>
+                      <p className="text-sm font-bold text-purple-700 tabular-nums">
+                        {hideNumbers
+                          ? `Rp ${maskNumber(totalOnline)}`
+                          : formatCurrency(totalOnline)}
+                      </p>
+                    </div>
+                  </div>
+                  {isYearly2026 && (
+                    <p className="text-[10px] text-gray-400 mt-2.5 leading-tight">
+                      *QRIS and Online values recorded only from April 2026
+                      onwards
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Table Header */}
             <div className="grid grid-cols-3 gap-4 px-6 py-2.5 bg-gray-50/80 text-xs font-semibold text-gray-400 uppercase tracking-wide">
               <div className="text-left">Item</div>

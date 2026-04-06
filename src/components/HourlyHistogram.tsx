@@ -10,7 +10,6 @@ const ShimmerStyle = () => (
   <style>
     {`
       .current-bar-shimmer {
-        position: relative;
         overflow: hidden;
       }
       .current-bar-shimmer::after {
@@ -166,7 +165,7 @@ const HourlyHistogram = ({
                 return (
                   <div
                     key={index}
-                    className="flex flex-col items-center justify-end"
+                    className="flex flex-col items-center justify-end h-full"
                     style={{ width: `${100 / data.length}%` }}
                     onMouseEnter={() => onHover(item, index)}
                     onMouseLeave={() => onHover(null, -1)}
