@@ -22,6 +22,11 @@ import {
   formatMonthLabel,
   fmtAmount,
   generateCashflowPDF,
+  confirmDiscrepancy,
+  rejectDiscrepancy,
+  undoDiscrepancyConfirmation,
+  DailyTransactionData,
+  formatDayLabel,
 } from "@/utils/cashflowUtils";
 
 const app = initializeApp(firebaseConfig);
@@ -172,6 +177,115 @@ function AddExpenseModal({ onSave, onClose }: { onSave: (d: { amount: number; ca
 }
 
 // ---------------------------------------------------------------------------
+// Discrepancy Modals
+// ---------------------------------------------------------------------------
+interface DiscrepancyInfo {
+  dateStr: string;
+  dateFmt: string;
+  dCash: number;
+  dQris: number;
+  dOnline: number;
+  actualCash: number;
+  actualQris: number;
+  actualOnline: number;
+}
+
+function ConfirmDiscrepancyModal({ info, onConfirm, onClose, loading }: { info: DiscrepancyInfo; onConfirm: () => void; onClose: () => void; loading: boolean }) {
+  const totalDelta = info.dCash + info.dQris + info.dOnline;
+  const renderDelta = (v: number) => {
+    if (v === 0) return <span className="text-gray-400">0</span>;
+    const pos = v > 0;
+    return <span className={`${MONO} font-semibold ${pos ? "text-emerald-600" : "text-red-500"}`}>{pos ? "+" : ""}{fmtAmount(v)}</span>;
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Discrepancy</h3>
+        <p className="text-sm text-gray-500 mb-5">Are you sure you want to confirm the discrepancy for <span className="font-semibold text-gray-700">{info.dateFmt}</span>? This will adjust the daily total and update monthly/yearly records.</p>
+        <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
+          <div className="flex justify-between text-sm"><span className="text-gray-500">Cash</span>{renderDelta(info.dCash)}</div>
+          <div className="flex justify-between text-sm"><span className="text-gray-500">QRIS</span>{renderDelta(info.dQris)}</div>
+          <div className="flex justify-between text-sm"><span className="text-gray-500">Online</span>{renderDelta(info.dOnline)}</div>
+          <div className="border-t border-gray-200 pt-2 flex justify-between text-sm font-bold"><span className="text-gray-700">Net Impact</span>{renderDelta(totalDelta)}</div>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-40">Cancel</button>
+          <button onClick={onConfirm} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-40">{loading ? "Confirming..." : "Confirm"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RejectDiscrepancyModal({ info, onReject, onClose, loading }: { info: DiscrepancyInfo; onReject: (actuals: { cash: number; qris: number; online: number }) => void; onClose: () => void; loading: boolean }) {
+  const fmtInput = (n: number) => new Intl.NumberFormat("id-ID").format(n);
+  const parseInput = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
+  const [cash, setCash] = useState(fmtInput(info.actualCash));
+  const [qris, setQris] = useState(fmtInput(info.actualQris));
+  const [online, setOnline] = useState(fmtInput(info.actualOnline));
+  const handleChange = (raw: string, setter: (v: string) => void) => {
+    const num = parseInput(raw);
+    setter(num === 0 && raw !== "0" && raw !== "" ? "" : fmtInput(num));
+  };
+  const parsedCash = parseInput(cash);
+  const parsedQris = parseInput(qris);
+  const parsedOnline = parseInput(online);
+
+  const newDCash = parsedCash - (info.actualCash - info.dCash);
+  const newDQris = parsedQris - (info.actualQris - info.dQris);
+  const newDOnline = parsedOnline - (info.actualOnline - info.dOnline);
+
+  const renderDelta = (v: number) => {
+    if (v === 0) return <span className="text-gray-400">0</span>;
+    const pos = v > 0;
+    return <span className={`${MONO} font-semibold ${pos ? "text-emerald-600" : "text-red-500"}`}>{pos ? "+" : ""}{fmtAmount(v)}</span>;
+  };
+  const inputClass = "w-full px-4 py-3 rounded-xl border border-gray-200 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Override Actual Values</h3>
+        <p className="text-sm text-gray-500 mb-5">You are overriding the cashier&apos;s count for <span className="font-semibold text-gray-700">{info.dateFmt}</span>. The new values will be used to adjust records.</p>
+        <div className="space-y-4 mb-5">
+          {[{ l: "Actual Cash", v: cash, s: setCash }, { l: "Actual QRIS", v: qris, s: setQris }, { l: "Actual Online", v: online, s: setOnline }].map(({ l, v, s }) => (
+            <div key={l}><label className="block text-sm font-medium text-gray-500 mb-1.5">{l}</label><input type="text" inputMode="numeric" value={v} onChange={(e) => handleChange(e.target.value, s)} className={inputClass} /></div>
+          ))}
+        </div>
+        <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">New Discrepancy Preview</p>
+          <div className="flex justify-between text-sm"><span className="text-gray-500">Cash</span>{renderDelta(newDCash)}</div>
+          <div className="flex justify-between text-sm"><span className="text-gray-500">QRIS</span>{renderDelta(newDQris)}</div>
+          <div className="flex justify-between text-sm"><span className="text-gray-500">Online</span>{renderDelta(newDOnline)}</div>
+          <div className="border-t border-gray-200 pt-2 flex justify-between text-sm font-bold"><span className="text-gray-700">Net Impact</span>{renderDelta(newDCash + newDQris + newDOnline)}</div>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-40">Cancel</button>
+          <button onClick={() => onReject({ cash: parsedCash, qris: parsedQris, online: parsedOnline })} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-40">{loading ? "Saving..." : "Confirm Changes"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UndoDiscrepancyModal({ dateFmt, onUndo, onClose, loading }: { dateFmt: string; onUndo: () => void; onClose: () => void; loading: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Undo Discrepancy Confirmation</h3>
+        <p className="text-sm text-gray-500 mb-6">Undo the confirmed discrepancy for <span className="font-semibold text-gray-700">{dateFmt}</span>? This will revert the daily total and monthly/yearly adjustments.</p>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-40">Cancel</button>
+          <button onClick={onUndo} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors disabled:opacity-40">{loading ? "Reverting..." : "Undo"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Account Card
 // ---------------------------------------------------------------------------
 function AccountCard({ label, balance, active, cat, icon, onClick }: { label: string; balance: number; active: boolean; cat: (typeof CATEGORY)[AccountType]; icon: React.ReactNode; onClick: () => void }) {
@@ -202,6 +316,39 @@ function ExpenseTooltip({ row }: { row: CashflowRow }) {
   );
 }
 
+function DiscrepancyTooltip({ row, onConfirm, onReject, onUndo }: { row: CashflowRow; onConfirm: () => void; onReject: () => void; onUndo: () => void }) {
+  const confirmed = row.isDiscrepancyConfirmed;
+  const renderVal = (v: number) => {
+    if (v === 0) return <span className={`${MONO} font-medium text-gray-400`}>0</span>;
+    const pos = v > 0;
+    return <span className={`${MONO} font-medium ${pos ? "text-emerald-600" : "text-red-500"}`}>{pos ? "+" : ""}{fmtAmount(v)}</span>;
+  };
+  return (
+    <div className="absolute bottom-full left-0 pb-1 z-50" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white/95 backdrop-blur-sm text-gray-700 text-xs rounded-xl shadow-lg border border-gray-200/80 p-3 min-w-[200px]">
+        {!confirmed ? (
+          <>
+            <div className="space-y-1.5 mb-3">
+              <div className="flex justify-between gap-6"><span className="text-gray-400">Cash</span>{renderVal(row.cashAmount)}</div>
+              <div className="flex justify-between gap-6"><span className="text-gray-400">QRIS</span>{renderVal(row.qrisAmount)}</div>
+              <div className="flex justify-between gap-6"><span className="text-gray-400">Online</span>{renderVal(row.onlineAmount)}</div>
+            </div>
+            <div className="flex gap-1.5">
+              <button onClick={onConfirm} className="flex-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-emerald-500/80 hover:bg-emerald-500 rounded-lg transition-colors text-center">Confirm</button>
+              <button onClick={onReject} className="flex-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-amber-500/80 hover:bg-amber-500 rounded-lg transition-colors text-center">Override</button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-emerald-500 font-medium text-[11px]">Confirmed</span>
+            <button onClick={onUndo} className="px-2.5 py-1.5 text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">Undo</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TableSkeleton() {
   return <div className="animate-pulse space-y-3 p-8">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-xl" />)}</div>;
 }
@@ -215,6 +362,7 @@ export default function CashflowPage() {
   const [months, setMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [allRows, setAllRows] = useState<CashflowRow[]>([]);
+  const [txnData, setTxnData] = useState<DailyTransactionData[]>([]);
   const [openingBalance, setOpeningBalance] = useState<OpeningBalance>({ openingCash: 0, openingQris: 0, openingOnline: 0 });
   const [activeAccount, setActiveAccount] = useState<AccountType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,6 +370,9 @@ export default function CashflowPage() {
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [hoveredExpenseIdx, setHoveredExpenseIdx] = useState<number | null>(null);
+  const [hoveredDiscIdx, setHoveredDiscIdx] = useState<number | null>(null);
+  const [discrepancyModal, setDiscrepancyModal] = useState<{ type: "confirm" | "reject" | "undo"; info: DiscrepancyInfo } | null>(null);
+  const [discrepancyLoading, setDiscrepancyLoading] = useState(false);
 
   const isCurrentMonth = (() => {
     if (!selectedMonth) return false;
@@ -233,7 +384,12 @@ export default function CashflowPage() {
   useEffect(() => {
     let cancelled = false;
     setIsLoadingMonths(true);
-    fetchAvailableMonths(db).then((m) => { if (cancelled) return; setMonths(m); if (m.length > 0 && !selectedMonth) setSelectedMonth(m[0]); setIsLoadingMonths(false); });
+    fetchAvailableMonths(db).then((m) => {
+      if (cancelled) return;
+      setMonths(m);
+      if (m.length > 0 && !selectedMonth) setSelectedMonth(m[0]);
+      setIsLoadingMonths(false);
+    });
     return () => { cancelled = true; };
   }, [isTestingMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -243,6 +399,7 @@ export default function CashflowPage() {
     try {
       const [txns, expenses, opening] = await Promise.all([fetchDailyTransactionsForMonth(db, selectedMonth), fetchExpensesForMonth(db, selectedMonth), fetchOpeningBalance(db, selectedMonth)]);
       setOpeningBalance(opening);
+      setTxnData(txns);
       setAllRows(buildCashflowRows(txns, expenses, opening));
     } catch (err) { console.error("Failed to load cashflow data:", err); }
     finally { setIsLoading(false); }
@@ -260,6 +417,58 @@ export default function CashflowPage() {
   const handleSaveBalance = async (b: OpeningBalance) => { setShowBalanceModal(false); setOpeningBalance(b); await saveOpeningBalance(db, selectedMonth, b); loadData(); };
   const handleAddExpense = async (d: { amount: number; category: string; sourceAccount: string }) => { setShowExpenseModal(false); await addExpense(db, d); loadData(); };
   const handleDownloadPDF = () => { if (allRows.length > 0) generateCashflowPDF(allRows, formatMonthLabel(selectedMonth)); };
+
+  const openDiscrepancyModal = (row: CashflowRow, type: "confirm" | "reject" | "undo") => {
+    const txn = txnData.find((t) => t.date === row.rawDate);
+    if (!txn) return;
+    const tCash = txn.totalCash ?? 0;
+    const tQris = txn.totalQris ?? 0;
+    const tOnline = txn.totalOnline ?? 0;
+    const info: DiscrepancyInfo = {
+      dateStr: row.rawDate,
+      dateFmt: formatDayLabel(row.rawDate),
+      dCash: (txn.actualCash ?? tCash) - tCash,
+      dQris: (txn.actualQris ?? tQris) - tQris,
+      dOnline: (txn.actualOnline ?? tOnline) - tOnline,
+      actualCash: txn.actualCash ?? tCash,
+      actualQris: txn.actualQris ?? tQris,
+      actualOnline: txn.actualOnline ?? tOnline,
+    };
+    setDiscrepancyModal({ type, info });
+  };
+
+  const handleConfirmDiscrepancy = async () => {
+    if (!discrepancyModal) return;
+    setDiscrepancyLoading(true);
+    try {
+      await confirmDiscrepancy(db, discrepancyModal.info.dateStr);
+      setDiscrepancyModal(null);
+      await loadData();
+    } catch (err) { console.error("Failed to confirm discrepancy:", err); }
+    finally { setDiscrepancyLoading(false); }
+  };
+
+  const handleRejectDiscrepancy = async (actuals: { cash: number; qris: number; online: number }) => {
+    if (!discrepancyModal) return;
+    setDiscrepancyLoading(true);
+    try {
+      await rejectDiscrepancy(db, discrepancyModal.info.dateStr, actuals);
+      setDiscrepancyModal(null);
+      await loadData();
+    } catch (err) { console.error("Failed to reject discrepancy:", err); }
+    finally { setDiscrepancyLoading(false); }
+  };
+
+  const handleUndoDiscrepancy = async () => {
+    if (!discrepancyModal) return;
+    setDiscrepancyLoading(true);
+    try {
+      await undoDiscrepancyConfirmation(db, discrepancyModal.info.dateStr);
+      setDiscrepancyModal(null);
+      await loadData();
+    } catch (err) { console.error("Failed to undo discrepancy:", err); }
+    finally { setDiscrepancyLoading(false); }
+  };
 
   const monthLabel = selectedMonth ? formatMonthLabel(selectedMonth) : "";
   const showCash = !activeAccount || activeAccount === "cash";
@@ -390,10 +599,31 @@ export default function CashflowPage() {
 
                         {/* Description — darker, bolder */}
                         <td className="px-5 py-3 whitespace-nowrap border-r border-gray-100">
-                          <div className="flex items-center relative" onMouseEnter={() => isExpense ? setHoveredExpenseIdx(idx) : null} onMouseLeave={() => setHoveredExpenseIdx(null)}>
+                          <div
+                            className="flex items-center relative"
+                            onMouseEnter={() => {
+                              if (isExpense) setHoveredExpenseIdx(idx);
+                              if (isDisc) setHoveredDiscIdx(idx);
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredExpenseIdx(null);
+                              setHoveredDiscIdx(null);
+                            }}
+                          >
                             <span className={`text-sm ${descStyle}`}>{row.description}</span>
+                            {isDisc && !row.isDiscrepancyConfirmed && (
+                              <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            )}
                             {isOpening && <button onClick={() => setShowBalanceModal(true)} className="ml-2 p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="Edit opening balance"><PencilIcon /></button>}
                             {hoveredExpenseIdx === idx && <ExpenseTooltip row={row} />}
+                            {hoveredDiscIdx === idx && isDisc && (
+                              <DiscrepancyTooltip
+                                row={row}
+                                onConfirm={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "confirm"); }}
+                                onReject={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "reject"); }}
+                                onUndo={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "undo"); }}
+                              />
+                            )}
                           </div>
                         </td>
 
@@ -430,6 +660,9 @@ export default function CashflowPage() {
 
       {showBalanceModal && <OpeningBalanceModal balance={openingBalance} onSave={handleSaveBalance} onClose={() => setShowBalanceModal(false)} />}
       {showExpenseModal && <AddExpenseModal onSave={handleAddExpense} onClose={() => setShowExpenseModal(false)} />}
+      {discrepancyModal?.type === "confirm" && <ConfirmDiscrepancyModal info={discrepancyModal.info} onConfirm={handleConfirmDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
+      {discrepancyModal?.type === "reject" && <RejectDiscrepancyModal info={discrepancyModal.info} onReject={handleRejectDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
+      {discrepancyModal?.type === "undo" && <UndoDiscrepancyModal dateFmt={discrepancyModal.info.dateFmt} onUndo={handleUndoDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
     </div>
   );
 }

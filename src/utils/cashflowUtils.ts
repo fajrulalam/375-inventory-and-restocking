@@ -8,6 +8,9 @@ import {
   getDoc,
   setDoc,
   addDoc,
+  increment,
+  writeBatch,
+  deleteField,
   orderBy,
   limit,
   Timestamp,
@@ -36,6 +39,7 @@ export interface CashflowRow {
   sourceAccount?: AccountType;
   expenseTimestamp?: Date;
   addedFromDashboardWeb?: boolean;
+  isDiscrepancyConfirmed?: boolean;
 }
 
 export interface OpeningBalance {
@@ -52,12 +56,12 @@ export interface DailyTransactionData {
   totalCash?: number;
   totalOnline?: number;
   totalQris?: number;
-  discrepancyCash: number;
-  discrepancyOnline: number;
-  discrepancyQris: number;
   closingCash: number;
   closingOnline: number;
   closingQris: number;
+  isDiscrepancyConfirmed?: boolean;
+  total?: number;
+  subTotal?: number;
 }
 
 export interface ExpenseData {
@@ -125,12 +129,12 @@ export async function fetchDailyTransactionsForMonth(
       totalCash: data.totalCash,
       totalOnline: data.totalOnline,
       totalQris: data.totalQris,
-      discrepancyCash: data.discrepancyCash ?? 0,
-      discrepancyOnline: data.discrepancyOnline ?? 0,
-      discrepancyQris: data.discrepancyQris ?? 0,
       closingCash: data.closingCash ?? 0,
       closingOnline: data.closingOnline ?? 0,
       closingQris: data.closingQris ?? 0,
+      isDiscrepancyConfirmed: data.isDiscrepancyConfirmed ?? false,
+      total: data.total,
+      subTotal: data.subTotal,
     });
   });
   return results;
@@ -262,6 +266,225 @@ export async function addExpense(
 }
 
 // ---------------------------------------------------------------------------
+// Discrepancy Confirm / Reject / Undo
+// ---------------------------------------------------------------------------
+
+export async function confirmDiscrepancy(
+  db: Firestore,
+  dateStr: string
+): Promise<void> {
+  const dailyRef = doc(db, getCollectionPath("DailyTransaction"), dateStr);
+  const snap = await getDoc(dailyRef);
+  if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
+
+  const data = snap.data();
+  const totalCash = data.totalCash ?? 0;
+  const totalQris = data.totalQris ?? 0;
+  const totalOnline = data.totalOnline ?? 0;
+  const actualCash = data.actualCash ?? totalCash;
+  const actualQris = data.actualQris ?? totalQris;
+  const actualOnline = data.actualOnline ?? totalOnline;
+
+  const deltaCash = actualCash - totalCash;
+  const deltaQris = actualQris - totalQris;
+  const deltaOnline = actualOnline - totalOnline;
+  const totalDelta = deltaCash + deltaQris + deltaOnline;
+
+  const oldTotal = data.total ?? 0;
+  const oldSubTotal = data.subTotal ?? 0;
+
+  const [yyyy, mm] = dateStr.split("-");
+  const monthId = `${yyyy}-${mm}`;
+  const yearId = yyyy;
+
+  const batch = writeBatch(db);
+
+  batch.update(dailyRef, {
+    isDiscrepancyConfirmed: true,
+    preConfirmTotal: oldTotal,
+    preConfirmSubTotal: oldSubTotal,
+    confirmedDeltaCash: deltaCash,
+    confirmedDeltaQris: deltaQris,
+    confirmedDeltaOnline: deltaOnline,
+    total: oldTotal + totalDelta,
+    subTotal: oldSubTotal + totalDelta,
+  });
+
+  const monthRef = doc(db, getCollectionPath("MonthlyTransaction"), monthId);
+  batch.update(monthRef, {
+    total: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
+  });
+
+  const yearRef = doc(db, getCollectionPath("YearlyTransaction"), yearId);
+  batch.update(yearRef, {
+    total: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
+  });
+
+  await batch.commit();
+}
+
+export async function rejectDiscrepancy(
+  db: Firestore,
+  dateStr: string,
+  editedActuals: { cash: number; qris: number; online: number }
+): Promise<void> {
+  const dailyRef = doc(db, getCollectionPath("DailyTransaction"), dateStr);
+  const snap = await getDoc(dailyRef);
+  if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
+
+  const data = snap.data();
+  const totalCash = data.totalCash ?? 0;
+  const totalQris = data.totalQris ?? 0;
+  const totalOnline = data.totalOnline ?? 0;
+
+  const deltaCash = editedActuals.cash - totalCash;
+  const deltaQris = editedActuals.qris - totalQris;
+  const deltaOnline = editedActuals.online - totalOnline;
+  const totalDelta = deltaCash + deltaQris + deltaOnline;
+
+  const oldTotal = data.total ?? 0;
+  const oldSubTotal = data.subTotal ?? 0;
+
+  const [yyyy, mm] = dateStr.split("-");
+  const monthId = `${yyyy}-${mm}`;
+  const yearId = yyyy;
+
+  const batch = writeBatch(db);
+
+  batch.update(dailyRef, {
+    isDiscrepancyConfirmed: true,
+    preConfirmTotal: oldTotal,
+    preConfirmSubTotal: oldSubTotal,
+    confirmedDeltaCash: deltaCash,
+    confirmedDeltaQris: deltaQris,
+    confirmedDeltaOnline: deltaOnline,
+    originalActualCash: data.actualCash,
+    originalActualQris: data.actualQris,
+    originalActualOnline: data.actualOnline,
+    actualCash: editedActuals.cash,
+    actualQris: editedActuals.qris,
+    actualOnline: editedActuals.online,
+    total: oldTotal + totalDelta,
+    subTotal: oldSubTotal + totalDelta,
+  });
+
+  const monthRef = doc(db, getCollectionPath("MonthlyTransaction"), monthId);
+  batch.update(monthRef, {
+    total: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
+  });
+
+  const yearRef = doc(db, getCollectionPath("YearlyTransaction"), yearId);
+  batch.update(yearRef, {
+    total: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
+  });
+
+  await batch.commit();
+}
+
+export async function undoDiscrepancyConfirmation(
+  db: Firestore,
+  dateStr: string
+): Promise<void> {
+  const dailyRef = doc(db, getCollectionPath("DailyTransaction"), dateStr);
+  const snap = await getDoc(dailyRef);
+  if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
+
+  const data = snap.data();
+  const deltaCash = data.confirmedDeltaCash ?? 0;
+  const deltaQris = data.confirmedDeltaQris ?? 0;
+  const deltaOnline = data.confirmedDeltaOnline ?? 0;
+  const totalDelta = deltaCash + deltaQris + deltaOnline;
+
+  const [yyyy, mm] = dateStr.split("-");
+  const monthId = `${yyyy}-${mm}`;
+  const yearId = yyyy;
+
+  const batch = writeBatch(db);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dailyUpdates: Record<string, any> = {
+    isDiscrepancyConfirmed: deleteField(),
+    preConfirmTotal: deleteField(),
+    preConfirmSubTotal: deleteField(),
+    confirmedDeltaCash: deleteField(),
+    confirmedDeltaQris: deleteField(),
+    confirmedDeltaOnline: deleteField(),
+    total: data.preConfirmTotal ?? data.total,
+    subTotal: data.preConfirmSubTotal ?? data.subTotal,
+  };
+
+  // Restore original actuals if they were overridden during reject
+  if (data.originalActualCash !== undefined) {
+    dailyUpdates.actualCash = data.originalActualCash;
+    dailyUpdates.actualQris = data.originalActualQris;
+    dailyUpdates.actualOnline = data.originalActualOnline;
+    dailyUpdates.originalActualCash = deleteField();
+    dailyUpdates.originalActualQris = deleteField();
+    dailyUpdates.originalActualOnline = deleteField();
+  }
+
+  batch.update(dailyRef, dailyUpdates);
+
+  const monthRef = doc(db, getCollectionPath("MonthlyTransaction"), monthId);
+  batch.update(monthRef, {
+    total: increment(-totalDelta),
+    totalCash: increment(-deltaCash),
+    totalQris: increment(-deltaQris),
+    totalOnline: increment(-deltaOnline),
+  });
+
+  const yearRef = doc(db, getCollectionPath("YearlyTransaction"), yearId);
+  batch.update(yearRef, {
+    total: increment(-totalDelta),
+    totalCash: increment(-deltaCash),
+    totalQris: increment(-deltaQris),
+    totalOnline: increment(-deltaOnline),
+  });
+
+  await batch.commit();
+}
+
+export async function fetchMonthsWithUnconfirmedDiscrepancies(
+  db: Firestore
+): Promise<Set<string>> {
+  const ref = collection(db, getCollectionPath("DailyTransaction"));
+  const snapshot = await getDocs(ref);
+  const months = new Set<string>();
+
+  snapshot.forEach((d) => {
+    const data = d.data();
+    if (data.isDiscrepancyConfirmed === true) return;
+    if (data.actualCash === undefined) return;
+
+    const totalCash = data.totalCash ?? 0;
+    const totalQris = data.totalQris ?? 0;
+    const totalOnline = data.totalOnline ?? 0;
+    const dCash = (data.actualCash ?? 0) - totalCash;
+    const dQris = (data.actualQris ?? 0) - totalQris;
+    const dOnline = (data.actualOnline ?? 0) - totalOnline;
+
+    if (dCash !== 0 || dQris !== 0 || dOnline !== 0) {
+      const [yyyy, mm] = d.id.split("-");
+      months.add(`${yyyy}-${mm}`);
+    }
+  });
+
+  return months;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -336,10 +559,10 @@ export function buildCashflowRows(
     let rowCount = 0;
 
     if (txn) {
-      // Sales
-      const sCash = txn.actualCash ?? txn.totalCash ?? 0;
-      const sOnline = txn.actualOnline ?? txn.totalOnline ?? 0;
-      const sQris = txn.actualQris ?? txn.totalQris ?? 0;
+      // Sales — always use system-recorded totals
+      const sCash = txn.totalCash ?? 0;
+      const sOnline = txn.totalOnline ?? 0;
+      const sQris = txn.totalQris ?? 0;
 
       cashBal += sCash;
       qrisBal += sQris;
@@ -359,29 +582,37 @@ export function buildCashflowRows(
       });
       rowCount++;
 
-      // Discrepancy (only when at least one account is non-zero)
-      const dCash = txn.discrepancyCash;
-      const dOnline = txn.discrepancyOnline;
-      const dQris = txn.discrepancyQris;
+      // Discrepancy — computed on the fly from actual vs total (only when actual* fields exist)
+      const hasActuals =
+        txn.actualCash !== undefined &&
+        txn.actualQris !== undefined &&
+        txn.actualOnline !== undefined;
 
-      if (dCash !== 0 || dOnline !== 0 || dQris !== 0) {
-        cashBal += dCash;
-        qrisBal += dQris;
-        onlineBal += dOnline;
+      if (hasActuals) {
+        const dCash = txn.actualCash! - (txn.totalCash ?? 0);
+        const dQris = txn.actualQris! - (txn.totalQris ?? 0);
+        const dOnline = txn.actualOnline! - (txn.totalOnline ?? 0);
 
-        rows.push({
-          date: rowCount === 0 ? formatDayLabel(dateStr) : "",
-          rawDate: dateStr,
-          description: "Discrepancy",
-          cashAmount: dCash,
-          cashBalance: cashBal,
-          qrisAmount: dQris,
-          qrisBalance: qrisBal,
-          onlineAmount: dOnline,
-          onlineBalance: onlineBal,
-          rowType: "discrepancy",
-        });
-        rowCount++;
+        if (dCash !== 0 || dOnline !== 0 || dQris !== 0) {
+          cashBal += dCash;
+          qrisBal += dQris;
+          onlineBal += dOnline;
+
+          rows.push({
+            date: rowCount === 0 ? formatDayLabel(dateStr) : "",
+            rawDate: dateStr,
+            description: "Discrepancy",
+            cashAmount: dCash,
+            cashBalance: cashBal,
+            qrisAmount: dQris,
+            qrisBalance: qrisBal,
+            onlineAmount: dOnline,
+            onlineBalance: onlineBal,
+            rowType: "discrepancy",
+            isDiscrepancyConfirmed: txn.isDiscrepancyConfirmed,
+          });
+          rowCount++;
+        }
       }
     }
 
