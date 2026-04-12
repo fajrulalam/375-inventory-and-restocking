@@ -93,23 +93,37 @@ All root collections used by the app. When testing mode is active, every collect
   actualCash?: number;   // Cashier-counted cash (end of day)
   actualOnline?: number; // Cashier-counted online (end of day)
   actualQris?: number;   // Cashier-counted QRIS (end of day)
-  closingCash: number;   // Running balance at end of day (NOT modified by confirm)
+  closingCash: number;   // Running balance at end of day (may be updated by anchor)
   closingOnline: number;
   closingQris: number;
+  // POS-written discrepancy fields (source of truth):
+  discrepancyCash?: number;     // Cashier count minus system total for cash
+  discrepancyQris?: number;
+  discrepancyOnline?: number;
   // Discrepancy confirmation fields (written by confirm/reject flow):
   isDiscrepancyConfirmed?: boolean;
   preConfirmTotal?: number;     // Stored for undo
   preConfirmSubTotal?: number;  // Stored for undo
-  confirmedDeltaCash?: number;  // actual - total (stored for undo)
+  confirmedDeltaCash?: number;  // discrepancy delta applied (stored for undo)
   confirmedDeltaQris?: number;
   confirmedDeltaOnline?: number;
   originalActualCash?: number;  // Stored when overriding (reject), for undo
   originalActualQris?: number;
   originalActualOnline?: number;
+  originalDiscrepancyCash?: number;   // Stored when overriding, for undo
+  originalDiscrepancyQris?: number;
+  originalDiscrepancyOnline?: number;
+  // Anchor balance fields (standalone, per-account optional):
+  anchorCash?: number;          // User-entered real physical balance
+  anchorQris?: number;          // Only present if that account was anchored
+  anchorOnline?: number;
+  preAnchorClosingCash?: number;   // Original closing balance before anchor (for undo)
+  preAnchorClosingQris?: number;
+  preAnchorClosingOnline?: number;
 }
 ```
 
-**Note**: `discrepancyCash`/`discrepancyOnline`/`discrepancyQris` fields exist in the document but are **ignored** by the app. Discrepancy is always calculated on the fly as `actual* - total*`.
+**Note**: `discrepancyCash`/`discrepancyOnline`/`discrepancyQris` fields are the **source of truth** for discrepancy. Written by the POS when cashier reports actuals. The app reads these directly instead of computing `actual* - total*`.
 
 ### Expenses Document Fields
 
@@ -264,40 +278,64 @@ Monthly ledger tracking Cash, QRIS, and Online account balances.
 
 ### Data Sources
 - **Sales**: `DailyTransaction` — always uses `totalCash`/`totalOnline`/`totalQris` (system-recorded)
-- **Discrepancy**: Calculated on the fly as `actualCash - totalCash` (etc.). Row only appears when `actual*` fields exist AND at least one discrepancy is non-zero. The stored `discrepancy*` fields in Firestore are **ignored**.
+- **Discrepancy**: Read from stored `discrepancyCash`/`discrepancyQris`/`discrepancyOnline` fields (written by POS). Row appears when at least one is non-zero.
+- **Adjustment**: Anchor balance corrections. Row appears when any `anchor*` field exists on a `DailyTransaction`. Each account is independently anchored (per-account). Adjustment amount is computed dynamically in the row builder as `anchorValue - currentRunningBalance`, capturing all accumulated drift.
 - **Expenses**: `Expenses` collection — each doc is its own row, `category` as description, `sourceAccount` determines which account column, amount displayed as negative
 - **Opening Balance**: `CashflowSettings` collection (doc ID = `YYYY-MM`) — overrides auto-calculated opening. Falls back to previous month's last `DailyTransaction.closingCash`/`closingOnline`/`closingQris`. Editable via pencil icon.
 
 ### Row Order Per Day
-Opening Balance (day 1 only) → Sales → Discrepancy (if non-zero) → Individual Expenses → ... → Closing Balance (end of month)
+Opening Balance (day 1 only) → Sales → Discrepancy (if non-zero) → Adjustment (if anchored) → Individual Expenses → ... → Closing Balance (end of month)
 
 ### Discrepancy Confirm / Reject / Undo Flow
 
-Discrepancy rows show up when `actual*` fields exist and differ from `total*` fields.
+Discrepancy rows show up when any `discrepancy*` field is non-zero.
 
 **Confirm**: Accepts the discrepancy as-is.
-- Calculates delta = `actual* - total*` for each account
+- Uses delta from `discrepancyCash`/`discrepancyQris`/`discrepancyOnline` fields directly
 - Stores `preConfirmTotal`, `preConfirmSubTotal`, `confirmedDelta*` on `DailyTransaction` for undo
-- Updates `total` and `subTotal` on `DailyTransaction` (subTotal = total - takeAwayFee)
+- Updates `total` and `subTotal` on `DailyTransaction`
 - Atomically increments `total`, `totalCash`, `totalQris`, `totalOnline` on `MonthlyTransaction/{YYYY-MM}` and `YearlyTransaction/{YYYY}` using `writeBatch` + Firestore `increment()`
 - Sets `isDiscrepancyConfirmed: true`
 - Does NOT modify `closing*` fields
 
 **Override (Reject)**: User edits `actual*` values, then triggers same logic as Confirm with edited values.
-- Stores `originalActual*` (original cashier values) before overwriting `actual*` on `DailyTransaction`
+- Stores `originalActual*` and `originalDiscrepancy*` before overwriting on `DailyTransaction`
+- Updates `discrepancyCash`/`discrepancyQris`/`discrepancyOnline` to the new computed discrepancy
 - Override modal inputs have thousand-separator formatting (`Intl.NumberFormat("id-ID")`)
 
-**Undo**: Reverts a confirmed/overridden discrepancy.
+**Undo Discrepancy**: Reverts a confirmed/overridden discrepancy.
 - Restores `total` and `subTotal` from `preConfirmTotal`/`preConfirmSubTotal`
 - Decrements Monthly/Yearly aggregates by the negative of `confirmedDelta*`
 - Restores `actual*` from `originalActual*` if they exist (override case)
+- Restores `discrepancy*` from `originalDiscrepancy*` if they exist (override case)
 - Removes all confirmation metadata fields using `deleteField()`
 
-**UI Behavior**:
+**UI Behavior (Discrepancy)**:
 - Unconfirmed discrepancy: small pulsing amber dot next to "Discrepancy" text
 - Confirmed discrepancy: no visual indicator at all (clean, uncluttered)
 - On hover over any discrepancy row: tooltip appears with amounts and action buttons (Confirm/Override for unconfirmed, Confirmed status + Undo for confirmed)
 - Tooltip uses frosted-glass style (`bg-white/95 backdrop-blur-sm`), seamless hover area (no gap between trigger and tooltip)
+
+### Anchor Balance (Standalone)
+
+Standalone feature for correcting snowball errors. Accessed via the "Anchor balance" button in the header (shown when transaction data exists). Independent from discrepancy confirm/reject flow.
+
+**Anchor**: User selects a date and chooses which accounts to anchor (1, 2, or all 3). Per-account:
+- Stores anchor value (`anchorCash`/`anchorQris`/`anchorOnline`) on `DailyTransaction`
+- Stores `preAnchorClosing*` before updating `closing*` to anchor value
+- Does NOT modify `total`, `subTotal`, Monthly/Yearly aggregates, or discrepancy confirmation
+- Row builder computes adjustment dynamically as `anchorValue - runningBalance`, capturing all drift
+
+**Undo Anchor**: Triggered from hovering over an Adjustment row in the table.
+- Restores `closing*` from `preAnchorClosing*` for each anchored account
+- Deletes anchor and preAnchorClosing fields using `deleteField()`
+- Does NOT modify aggregates (since anchor never touched them)
+
+**UI Behavior (Anchor)**:
+- "Anchor balance" button in header (indigo-themed, like "Add expense" but with anchor icon)
+- Modal: date selector (all dates with data in month), per-account checkboxes with toggle, input pre-fills with current closing balance, adjustment preview with Expense/Earning labels
+- Adjustment row tint: `bg-blue-50/25`
+- On hover over Adjustment row: tooltip shows per-account amounts + "Anchored" status + Undo button
 
 ### Account Filter
 Three floating cards (Cash/QRIS/Online) at top showing closing balance. Clicking one filters table to that account's columns and relevant rows only. Click again to deselect.

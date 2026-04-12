@@ -35,7 +35,7 @@ export interface CashflowRow {
   qrisBalance: number;
   onlineAmount: number;
   onlineBalance: number;
-  rowType: "opening" | "sales" | "discrepancy" | "expense" | "closing";
+  rowType: "opening" | "sales" | "discrepancy" | "expense" | "adjustment" | "closing";
   sourceAccount?: AccountType;
   expenseTimestamp?: Date;
   addedFromDashboardWeb?: boolean;
@@ -62,6 +62,12 @@ export interface DailyTransactionData {
   isDiscrepancyConfirmed?: boolean;
   total?: number;
   subTotal?: number;
+  discrepancyCash?: number;
+  discrepancyQris?: number;
+  discrepancyOnline?: number;
+  anchorCash?: number;
+  anchorQris?: number;
+  anchorOnline?: number;
 }
 
 export interface ExpenseData {
@@ -135,6 +141,12 @@ export async function fetchDailyTransactionsForMonth(
       isDiscrepancyConfirmed: data.isDiscrepancyConfirmed ?? false,
       total: data.total,
       subTotal: data.subTotal,
+      discrepancyCash: data.discrepancyCash,
+      discrepancyQris: data.discrepancyQris,
+      discrepancyOnline: data.discrepancyOnline,
+      anchorCash: data.anchorCash,
+      anchorQris: data.anchorQris,
+      anchorOnline: data.anchorOnline,
     });
   });
   return results;
@@ -278,16 +290,9 @@ export async function confirmDiscrepancy(
   if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
 
   const data = snap.data();
-  const totalCash = data.totalCash ?? 0;
-  const totalQris = data.totalQris ?? 0;
-  const totalOnline = data.totalOnline ?? 0;
-  const actualCash = data.actualCash ?? totalCash;
-  const actualQris = data.actualQris ?? totalQris;
-  const actualOnline = data.actualOnline ?? totalOnline;
-
-  const deltaCash = actualCash - totalCash;
-  const deltaQris = actualQris - totalQris;
-  const deltaOnline = actualOnline - totalOnline;
+  const deltaCash = data.discrepancyCash ?? 0;
+  const deltaQris = data.discrepancyQris ?? 0;
+  const deltaOnline = data.discrepancyOnline ?? 0;
   const totalDelta = deltaCash + deltaQris + deltaOnline;
 
   const oldTotal = data.total ?? 0;
@@ -367,9 +372,15 @@ export async function rejectDiscrepancy(
     originalActualCash: data.actualCash,
     originalActualQris: data.actualQris,
     originalActualOnline: data.actualOnline,
+    originalDiscrepancyCash: data.discrepancyCash,
+    originalDiscrepancyQris: data.discrepancyQris,
+    originalDiscrepancyOnline: data.discrepancyOnline,
     actualCash: editedActuals.cash,
     actualQris: editedActuals.qris,
     actualOnline: editedActuals.online,
+    discrepancyCash: deltaCash,
+    discrepancyQris: deltaQris,
+    discrepancyOnline: deltaOnline,
     total: oldTotal + totalDelta,
     subTotal: oldSubTotal + totalDelta,
   });
@@ -390,6 +401,77 @@ export async function rejectDiscrepancy(
     totalOnline: increment(deltaOnline),
   });
 
+  await batch.commit();
+}
+
+export async function anchorBalance(
+  db: Firestore,
+  dateStr: string,
+  anchors: { cash?: number; qris?: number; online?: number }
+): Promise<void> {
+  const dailyRef = doc(db, getCollectionPath("DailyTransaction"), dateStr);
+  const snap = await getDoc(dailyRef);
+  if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
+
+  const data = snap.data();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {};
+
+  if (anchors.cash !== undefined) {
+    updates.anchorCash = anchors.cash;
+    updates.preAnchorClosingCash = data.closingCash ?? 0;
+    updates.closingCash = anchors.cash;
+  }
+  if (anchors.qris !== undefined) {
+    updates.anchorQris = anchors.qris;
+    updates.preAnchorClosingQris = data.closingQris ?? 0;
+    updates.closingQris = anchors.qris;
+  }
+  if (anchors.online !== undefined) {
+    updates.anchorOnline = anchors.online;
+    updates.preAnchorClosingOnline = data.closingOnline ?? 0;
+    updates.closingOnline = anchors.online;
+  }
+
+  const batch = writeBatch(db);
+  batch.update(dailyRef, updates);
+  await batch.commit();
+}
+
+export async function undoAnchor(
+  db: Firestore,
+  dateStr: string
+): Promise<void> {
+  const dailyRef = doc(db, getCollectionPath("DailyTransaction"), dateStr);
+  const snap = await getDoc(dailyRef);
+  if (!snap.exists()) throw new Error(`DailyTransaction/${dateStr} not found`);
+
+  const data = snap.data();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {};
+
+  if (data.anchorCash !== undefined) {
+    updates.closingCash = data.preAnchorClosingCash ?? data.closingCash;
+    updates.anchorCash = deleteField();
+    updates.preAnchorClosingCash = deleteField();
+  }
+  if (data.anchorQris !== undefined) {
+    updates.closingQris = data.preAnchorClosingQris ?? data.closingQris;
+    updates.anchorQris = deleteField();
+    updates.preAnchorClosingQris = deleteField();
+  }
+  if (data.anchorOnline !== undefined) {
+    updates.closingOnline = data.preAnchorClosingOnline ?? data.closingOnline;
+    updates.anchorOnline = deleteField();
+    updates.preAnchorClosingOnline = deleteField();
+  }
+
+  if (Object.keys(updates).length === 0) return;
+
+  const batch = writeBatch(db);
+  batch.update(dailyRef, updates);
   await batch.commit();
 }
 
@@ -425,7 +507,7 @@ export async function undoDiscrepancyConfirmation(
     subTotal: data.preConfirmSubTotal ?? data.subTotal,
   };
 
-  // Restore original actuals if they were overridden during reject
+  // Restore original actuals + discrepancy if they were overridden during reject
   if (data.originalActualCash !== undefined) {
     dailyUpdates.actualCash = data.originalActualCash;
     dailyUpdates.actualQris = data.originalActualQris;
@@ -433,6 +515,14 @@ export async function undoDiscrepancyConfirmation(
     dailyUpdates.originalActualCash = deleteField();
     dailyUpdates.originalActualQris = deleteField();
     dailyUpdates.originalActualOnline = deleteField();
+  }
+  if (data.originalDiscrepancyCash !== undefined) {
+    dailyUpdates.discrepancyCash = data.originalDiscrepancyCash;
+    dailyUpdates.discrepancyQris = data.originalDiscrepancyQris;
+    dailyUpdates.discrepancyOnline = data.originalDiscrepancyOnline;
+    dailyUpdates.originalDiscrepancyCash = deleteField();
+    dailyUpdates.originalDiscrepancyQris = deleteField();
+    dailyUpdates.originalDiscrepancyOnline = deleteField();
   }
 
   batch.update(dailyRef, dailyUpdates);
@@ -466,14 +556,10 @@ export async function fetchMonthsWithUnconfirmedDiscrepancies(
   snapshot.forEach((d) => {
     const data = d.data();
     if (data.isDiscrepancyConfirmed === true) return;
-    if (data.actualCash === undefined) return;
 
-    const totalCash = data.totalCash ?? 0;
-    const totalQris = data.totalQris ?? 0;
-    const totalOnline = data.totalOnline ?? 0;
-    const dCash = (data.actualCash ?? 0) - totalCash;
-    const dQris = (data.actualQris ?? 0) - totalQris;
-    const dOnline = (data.actualOnline ?? 0) - totalOnline;
+    const dCash = data.discrepancyCash ?? 0;
+    const dQris = data.discrepancyQris ?? 0;
+    const dOnline = data.discrepancyOnline ?? 0;
 
     if (dCash !== 0 || dQris !== 0 || dOnline !== 0) {
       const [yyyy, mm] = d.id.split("-");
@@ -582,37 +668,56 @@ export function buildCashflowRows(
       });
       rowCount++;
 
-      // Discrepancy — computed on the fly from actual vs total (only when actual* fields exist)
-      const hasActuals =
-        txn.actualCash !== undefined &&
-        txn.actualQris !== undefined &&
-        txn.actualOnline !== undefined;
+      // Discrepancy — read from stored fields
+      const dCash = txn.discrepancyCash ?? 0;
+      const dQris = txn.discrepancyQris ?? 0;
+      const dOnline = txn.discrepancyOnline ?? 0;
 
-      if (hasActuals) {
-        const dCash = txn.actualCash! - (txn.totalCash ?? 0);
-        const dQris = txn.actualQris! - (txn.totalQris ?? 0);
-        const dOnline = txn.actualOnline! - (txn.totalOnline ?? 0);
+      if (dCash !== 0 || dOnline !== 0 || dQris !== 0) {
+        cashBal += dCash;
+        qrisBal += dQris;
+        onlineBal += dOnline;
 
-        if (dCash !== 0 || dOnline !== 0 || dQris !== 0) {
-          cashBal += dCash;
-          qrisBal += dQris;
-          onlineBal += dOnline;
+        rows.push({
+          date: rowCount === 0 ? formatDayLabel(dateStr) : "",
+          rawDate: dateStr,
+          description: "Discrepancy",
+          cashAmount: dCash,
+          cashBalance: cashBal,
+          qrisAmount: dQris,
+          qrisBalance: qrisBal,
+          onlineAmount: dOnline,
+          onlineBalance: onlineBal,
+          rowType: "discrepancy",
+          isDiscrepancyConfirmed: txn.isDiscrepancyConfirmed,
+        });
+        rowCount++;
+      }
 
-          rows.push({
-            date: rowCount === 0 ? formatDayLabel(dateStr) : "",
-            rawDate: dateStr,
-            description: "Discrepancy",
-            cashAmount: dCash,
-            cashBalance: cashBal,
-            qrisAmount: dQris,
-            qrisBalance: qrisBal,
-            onlineAmount: dOnline,
-            onlineBalance: onlineBal,
-            rowType: "discrepancy",
-            isDiscrepancyConfirmed: txn.isDiscrepancyConfirmed,
-          });
-          rowCount++;
-        }
+      // Anchor adjustment — per-account, dynamically computed against running balance
+      const hasAnchor = txn.anchorCash !== undefined || txn.anchorQris !== undefined || txn.anchorOnline !== undefined;
+      if (hasAnchor) {
+        const adjCash = txn.anchorCash !== undefined ? txn.anchorCash - cashBal : 0;
+        const adjQris = txn.anchorQris !== undefined ? txn.anchorQris - qrisBal : 0;
+        const adjOnline = txn.anchorOnline !== undefined ? txn.anchorOnline - onlineBal : 0;
+
+        if (txn.anchorCash !== undefined) cashBal = txn.anchorCash;
+        if (txn.anchorQris !== undefined) qrisBal = txn.anchorQris;
+        if (txn.anchorOnline !== undefined) onlineBal = txn.anchorOnline;
+
+        rows.push({
+          date: rowCount === 0 ? formatDayLabel(dateStr) : "",
+          rawDate: dateStr,
+          description: "Adjustment",
+          cashAmount: adjCash,
+          cashBalance: cashBal,
+          qrisAmount: adjQris,
+          qrisBalance: qrisBal,
+          onlineAmount: adjOnline,
+          onlineBalance: onlineBal,
+          rowType: "adjustment",
+        });
+        rowCount++;
       }
     }
 
@@ -670,7 +775,7 @@ export function filterRowsByAccount(
   account: AccountType
 ): CashflowRow[] {
   return rows.filter((r) => {
-    if (r.rowType === "opening" || r.rowType === "closing" || r.rowType === "sales")
+    if (r.rowType === "opening" || r.rowType === "closing" || r.rowType === "sales" || r.rowType === "adjustment")
       return true;
     if (r.rowType === "discrepancy") {
       if (account === "cash") return r.cashAmount !== 0;
@@ -783,6 +888,8 @@ export function generateCashflowPDF(
       if (row.rowType === "opening") {
         data.cell.styles.fillColor = [248, 250, 252];
         data.cell.styles.fontStyle = "bold";
+      } else if (row.rowType === "adjustment") {
+        data.cell.styles.fillColor = [239, 246, 255]; // blue-50
       } else if (row.rowType === "closing") {
         data.cell.styles.fillColor = [203, 213, 225]; // slate-300
         data.cell.styles.fontStyle = "bold";

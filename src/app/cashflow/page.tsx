@@ -25,6 +25,8 @@ import {
   confirmDiscrepancy,
   rejectDiscrepancy,
   undoDiscrepancyConfirmation,
+  anchorBalance,
+  undoAnchor,
   DailyTransactionData,
   formatDayLabel,
 } from "@/utils/cashflowUtils";
@@ -188,6 +190,9 @@ interface DiscrepancyInfo {
   actualCash: number;
   actualQris: number;
   actualOnline: number;
+  totalCash: number;
+  totalQris: number;
+  totalOnline: number;
 }
 
 function ConfirmDiscrepancyModal({ info, onConfirm, onClose, loading }: { info: DiscrepancyInfo; onConfirm: () => void; onClose: () => void; loading: boolean }) {
@@ -231,10 +236,9 @@ function RejectDiscrepancyModal({ info, onReject, onClose, loading }: { info: Di
   const parsedCash = parseInput(cash);
   const parsedQris = parseInput(qris);
   const parsedOnline = parseInput(online);
-
-  const newDCash = parsedCash - (info.actualCash - info.dCash);
-  const newDQris = parsedQris - (info.actualQris - info.dQris);
-  const newDOnline = parsedOnline - (info.actualOnline - info.dOnline);
+  const newDCash = parsedCash - info.totalCash;
+  const newDQris = parsedQris - info.totalQris;
+  const newDOnline = parsedOnline - info.totalOnline;
 
   const renderDelta = (v: number) => {
     if (v === 0) return <span className="text-gray-400">0</span>;
@@ -263,6 +267,122 @@ function RejectDiscrepancyModal({ info, onReject, onClose, loading }: { info: Di
         <div className="flex gap-3">
           <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-40">Cancel</button>
           <button onClick={() => onReject({ cash: parsedCash, qris: parsedQris, online: parsedOnline })} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-40">{loading ? "Saving..." : "Confirm Changes"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnchorBalanceModal({ txnData, onAnchor, onClose, loading }: { txnData: DailyTransactionData[]; onAnchor: (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => void; onClose: () => void; loading: boolean }) {
+  const fmtInput = (n: number) => new Intl.NumberFormat("id-ID").format(n);
+  const parseInput = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
+  const dates = txnData.map((t) => t.date);
+  const [selectedDate, setSelectedDate] = useState(dates[dates.length - 1] ?? "");
+  const txn = txnData.find((t) => t.date === selectedDate);
+
+  const [cashEnabled, setCashEnabled] = useState(true);
+  const [qrisEnabled, setQrisEnabled] = useState(false);
+  const [onlineEnabled, setOnlineEnabled] = useState(false);
+  const [cash, setCash] = useState(fmtInput(txn?.closingCash ?? 0));
+  const [qris, setQris] = useState(fmtInput(txn?.closingQris ?? 0));
+  const [online, setOnline] = useState(fmtInput(txn?.closingOnline ?? 0));
+
+  const handleDateChange = (d: string) => {
+    setSelectedDate(d);
+    const t = txnData.find((t) => t.date === d);
+    if (t) {
+      setCash(fmtInput(t.closingCash));
+      setQris(fmtInput(t.closingQris));
+      setOnline(fmtInput(t.closingOnline));
+    }
+  };
+  const handleChange = (raw: string, setter: (v: string) => void) => {
+    const num = parseInput(raw);
+    setter(num === 0 && raw !== "0" && raw !== "" ? "" : fmtInput(num));
+  };
+
+  const curCash = txn?.closingCash ?? 0;
+  const curQris = txn?.closingQris ?? 0;
+  const curOnline = txn?.closingOnline ?? 0;
+  const parsedCash = parseInput(cash);
+  const parsedQris = parseInput(qris);
+  const parsedOnline = parseInput(online);
+  const adjCash = cashEnabled ? parsedCash - curCash : 0;
+  const adjQris = qrisEnabled ? parsedQris - curQris : 0;
+  const adjOnline = onlineEnabled ? parsedOnline - curOnline : 0;
+  const anyEnabled = cashEnabled || qrisEnabled || onlineEnabled;
+
+  const renderDelta = (v: number) => {
+    if (v === 0) return <span className="text-gray-400">0</span>;
+    const pos = v > 0;
+    return <span className={`${MONO} font-semibold ${pos ? "text-emerald-600" : "text-red-500"}`}>{pos ? "+" : ""}{fmtAmount(v)}</span>;
+  };
+  const adjLabel = (v: number) => {
+    if (v === 0) return null;
+    return <span className={`text-[10px] font-medium ml-1.5 ${v > 0 ? "text-emerald-500" : "text-red-400"}`}>{v > 0 ? "Earning" : "Expense"}</span>;
+  };
+  const inputClass = "w-full px-4 py-3 rounded-xl border border-gray-200 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent";
+  const accounts: { key: "cash" | "qris" | "online"; label: string; enabled: boolean; setEnabled: (v: boolean) => void; value: string; setValue: (v: string) => void; current: number }[] = [
+    { key: "cash", label: "Cash", enabled: cashEnabled, setEnabled: setCashEnabled, value: cash, setValue: setCash, current: curCash },
+    { key: "qris", label: "QRIS", enabled: qrisEnabled, setEnabled: setQrisEnabled, value: qris, setValue: setQris, current: curQris },
+    { key: "online", label: "Online", enabled: onlineEnabled, setEnabled: setOnlineEnabled, value: online, setValue: setOnline, current: curOnline },
+  ];
+
+  const handleSubmit = () => {
+    const anchors: { cash?: number; qris?: number; online?: number } = {};
+    if (cashEnabled) anchors.cash = parsedCash;
+    if (qrisEnabled) anchors.qris = parsedQris;
+    if (onlineEnabled) anchors.online = parsedOnline;
+    onAnchor(selectedDate, anchors);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Anchor Balance</h3>
+        <p className="text-sm text-gray-500 mb-5">Set the real physical balance. The system will adjust to match your count and correct any drift.</p>
+
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-gray-500 mb-1.5">Date</label>
+          <div className="relative">
+            <select value={selectedDate} onChange={(e) => handleDateChange(e.target.value)} className="appearance-none w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 text-base font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent cursor-pointer">
+              {dates.map((d) => <option key={d} value={d}>{formatDayLabel(d)}</option>)}
+            </select>
+            <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+
+        <div className="space-y-4 mb-5">
+          {accounts.map(({ key, label, enabled, setEnabled, value, setValue, current }) => (
+            <div key={key} className={`rounded-xl border p-4 transition-all ${enabled ? "border-indigo-200 bg-indigo-50/30" : "border-gray-100 bg-gray-50/50 opacity-60"}`}>
+              <div className="flex items-center justify-between mb-2">
+                <button onClick={() => setEnabled(!enabled)} className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${enabled ? "bg-indigo-600 border-indigo-600" : "border-gray-300 bg-white"}`}>
+                    {enabled && <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">{label}</span>
+                </button>
+                <span className={`text-[11px] ${MONO} text-gray-400`}>Current: {fmtAmount(current)}</span>
+              </div>
+              {enabled && <input type="text" inputMode="numeric" value={value} onChange={(e) => handleChange(e.target.value, setValue)} className={inputClass} />}
+            </div>
+          ))}
+        </div>
+
+        {anyEnabled && (
+          <div className="bg-blue-50/60 rounded-xl p-4 mb-6 space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Adjustment Preview</p>
+            {cashEnabled && <div className="flex justify-between items-center text-sm"><span className="text-gray-500">Cash{adjLabel(adjCash)}</span>{renderDelta(adjCash)}</div>}
+            {qrisEnabled && <div className="flex justify-between items-center text-sm"><span className="text-gray-500">QRIS{adjLabel(adjQris)}</span>{renderDelta(adjQris)}</div>}
+            {onlineEnabled && <div className="flex justify-between items-center text-sm"><span className="text-gray-500">Online{adjLabel(adjOnline)}</span>{renderDelta(adjOnline)}</div>}
+            <div className="border-t border-blue-200/60 pt-2 flex justify-between text-sm font-bold"><span className="text-gray-700">Net Adjustment</span>{renderDelta(adjCash + adjQris + adjOnline)}</div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-40">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading || !anyEnabled} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40">{loading ? "Anchoring..." : "Anchor Balance"}</button>
         </div>
       </div>
     </div>
@@ -349,6 +469,37 @@ function DiscrepancyTooltip({ row, onConfirm, onReject, onUndo }: { row: Cashflo
   );
 }
 
+function AdjustmentTooltip({ row, onUndo }: { row: CashflowRow; onUndo: () => void }) {
+  const renderVal = (label: string, v: number) => {
+    if (v === 0) return null;
+    const pos = v > 0;
+    return (
+      <div className="flex justify-between gap-6">
+        <span className="text-gray-400">{label}</span>
+        <span className={`${MONO} font-medium ${pos ? "text-emerald-600" : "text-red-500"}`}>{pos ? "+" : ""}{fmtAmount(v)}</span>
+      </div>
+    );
+  };
+  return (
+    <div className="absolute bottom-full left-0 pb-1 z-50" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white/95 backdrop-blur-sm text-gray-700 text-xs rounded-xl shadow-lg border border-gray-200/80 p-3 min-w-[200px]">
+        <div className="space-y-1.5 mb-3">
+          {renderVal("Cash", row.cashAmount)}
+          {renderVal("QRIS", row.qrisAmount)}
+          {renderVal("Online", row.onlineAmount)}
+          {row.cashAmount === 0 && row.qrisAmount === 0 && row.onlineAmount === 0 && (
+            <span className="text-gray-400">No change</span>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-indigo-500 font-medium text-[11px]">Anchored</span>
+          <button onClick={onUndo} className="px-2.5 py-1.5 text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">Undo</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TableSkeleton() {
   return <div className="animate-pulse space-y-3 p-8">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded-xl" />)}</div>;
 }
@@ -369,8 +520,10 @@ export default function CashflowPage() {
   const [isLoadingMonths, setIsLoadingMonths] = useState(true);
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showAnchorModal, setShowAnchorModal] = useState(false);
   const [hoveredExpenseIdx, setHoveredExpenseIdx] = useState<number | null>(null);
   const [hoveredDiscIdx, setHoveredDiscIdx] = useState<number | null>(null);
+  const [hoveredAdjIdx, setHoveredAdjIdx] = useState<number | null>(null);
   const [discrepancyModal, setDiscrepancyModal] = useState<{ type: "confirm" | "reject" | "undo"; info: DiscrepancyInfo } | null>(null);
   const [discrepancyLoading, setDiscrepancyLoading] = useState(false);
 
@@ -427,12 +580,15 @@ export default function CashflowPage() {
     const info: DiscrepancyInfo = {
       dateStr: row.rawDate,
       dateFmt: formatDayLabel(row.rawDate),
-      dCash: (txn.actualCash ?? tCash) - tCash,
-      dQris: (txn.actualQris ?? tQris) - tQris,
-      dOnline: (txn.actualOnline ?? tOnline) - tOnline,
+      dCash: txn.discrepancyCash ?? 0,
+      dQris: txn.discrepancyQris ?? 0,
+      dOnline: txn.discrepancyOnline ?? 0,
       actualCash: txn.actualCash ?? tCash,
       actualQris: txn.actualQris ?? tQris,
       actualOnline: txn.actualOnline ?? tOnline,
+      totalCash: tCash,
+      totalQris: tQris,
+      totalOnline: tOnline,
     };
     setDiscrepancyModal({ type, info });
   };
@@ -457,6 +613,24 @@ export default function CashflowPage() {
       await loadData();
     } catch (err) { console.error("Failed to reject discrepancy:", err); }
     finally { setDiscrepancyLoading(false); }
+  };
+
+  const [anchorLoading, setAnchorLoading] = useState(false);
+  const handleAnchorBalance = async (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => {
+    setAnchorLoading(true);
+    try {
+      await anchorBalance(db, dateStr, anchors);
+      setShowAnchorModal(false);
+      await loadData();
+    } catch (err) { console.error("Failed to anchor balance:", err); }
+    finally { setAnchorLoading(false); }
+  };
+
+  const handleUndoAnchor = async (dateStr: string) => {
+    try {
+      await undoAnchor(db, dateStr);
+      await loadData();
+    } catch (err) { console.error("Failed to undo anchor:", err); }
   };
 
   const handleUndoDiscrepancy = async () => {
@@ -513,6 +687,12 @@ export default function CashflowPage() {
             <button onClick={toggleTestingMode} className={`p-2.5 rounded-xl border transition-all duration-200 ${isTestingMode ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-300 ring-offset-1 shadow-sm" : "text-gray-400 bg-white border-gray-100 hover:text-gray-600 hover:border-gray-200 shadow-sm"}`} title={isTestingMode ? "Testing mode ON" : "Testing mode OFF"}>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 013.55.621l.502.164a12.826 12.826 0 003.78.596 8.65 8.65 0 01-6.373-.1l-.331-.125a6.75 6.75 0 00-2.94-.423L2.785 14.07c-.163.163-.163.427 0 .59l2.424 2.424c.164.164.428.164.591 0l3.072-3.072a2.75 2.75 0 011.944-.806h4.644A2.5 2.5 0 0018 10.75V9.5a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586L8.5 3.528z" clipRule="evenodd" /></svg>
             </button>
+            {txnData.length > 0 && (
+              <button onClick={() => setShowAnchorModal(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M10 2a.75.75 0 0 1 .75.75v.5a4.002 4.002 0 0 1 3.244 3.673l.007.127H15a.75.75 0 0 1 0 1.5h-.999a4.002 4.002 0 0 1-3.251 3.2V15.5A2.5 2.5 0 0 0 13.25 18a.75.75 0 0 1 0 1.5A4 4 0 0 1 9.25 15.5v-3.75a4.002 4.002 0 0 1-3.251-3.2H5a.75.75 0 0 1 0-1.5h.999a4.002 4.002 0 0 1 3.251-3.8v-.5A.75.75 0 0 1 10 2Zm-2.5 5.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0Z" clipRule="evenodd" /></svg>
+                Anchor balance
+              </button>
+            )}
             {isCurrentMonth && (
               <button onClick={() => setShowExpenseModal(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" /></svg>
@@ -569,6 +749,7 @@ export default function CashflowPage() {
                     const isExpense = row.rowType === "expense";
                     const isSales = row.rowType === "sales";
                     const isDisc = row.rowType === "discrepancy";
+                    const isAdjustment = row.rowType === "adjustment";
                     const hasDate = row.date !== "";
 
                     const prevRow = idx > 0 ? displayRows[idx - 1] : null;
@@ -581,6 +762,7 @@ export default function CashflowPage() {
                     else if (isSales) rowBg = "bg-emerald-50/30";
                     else if (isExpense) rowBg = "bg-red-50/25";
                     else if (isDisc) rowBg = "bg-amber-50/25";
+                    else if (isAdjustment) rowBg = "bg-blue-50/25";
 
                     const daySep = isClosing ? "border-t-2 border-slate-400" : isDayStart && !isOpening ? "border-t-2 border-gray-200" : "border-t border-gray-100";
 
@@ -604,10 +786,12 @@ export default function CashflowPage() {
                             onMouseEnter={() => {
                               if (isExpense) setHoveredExpenseIdx(idx);
                               if (isDisc) setHoveredDiscIdx(idx);
+                              if (isAdjustment) setHoveredAdjIdx(idx);
                             }}
                             onMouseLeave={() => {
                               setHoveredExpenseIdx(null);
                               setHoveredDiscIdx(null);
+                              setHoveredAdjIdx(null);
                             }}
                           >
                             <span className={`text-sm ${descStyle}`}>{row.description}</span>
@@ -622,6 +806,12 @@ export default function CashflowPage() {
                                 onConfirm={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "confirm"); }}
                                 onReject={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "reject"); }}
                                 onUndo={() => { setHoveredDiscIdx(null); openDiscrepancyModal(row, "undo"); }}
+                              />
+                            )}
+                            {hoveredAdjIdx === idx && isAdjustment && (
+                              <AdjustmentTooltip
+                                row={row}
+                                onUndo={() => { setHoveredAdjIdx(null); handleUndoAnchor(row.rawDate); }}
                               />
                             )}
                           </div>
@@ -660,6 +850,7 @@ export default function CashflowPage() {
 
       {showBalanceModal && <OpeningBalanceModal balance={openingBalance} onSave={handleSaveBalance} onClose={() => setShowBalanceModal(false)} />}
       {showExpenseModal && <AddExpenseModal onSave={handleAddExpense} onClose={() => setShowExpenseModal(false)} />}
+      {showAnchorModal && <AnchorBalanceModal txnData={txnData} onAnchor={handleAnchorBalance} onClose={() => setShowAnchorModal(false)} loading={anchorLoading} />}
       {discrepancyModal?.type === "confirm" && <ConfirmDiscrepancyModal info={discrepancyModal.info} onConfirm={handleConfirmDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
       {discrepancyModal?.type === "reject" && <RejectDiscrepancyModal info={discrepancyModal.info} onReject={handleRejectDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
       {discrepancyModal?.type === "undo" && <UndoDiscrepancyModal dateFmt={discrepancyModal.info.dateFmt} onUndo={handleUndoDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
