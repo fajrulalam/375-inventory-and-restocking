@@ -67,6 +67,7 @@ export interface ServedOrderData {
   timestampServe: Timestamp;
   serveTimeMinutes: number; // Time delta in minutes
   total: number;
+  paymentMethod?: string;
 }
 
 // Interface for pending order data
@@ -392,6 +393,7 @@ const processServedOrdersForUI = (
       timestampServe: data.timestampServe,
       serveTimeMinutes,
       total: data.total || 0,
+      paymentMethod: data.paymentMethod || "",
     });
   });
 
@@ -659,6 +661,52 @@ export const fetchPendingOrders = async (
     return processPendingOrdersForUI(querySnapshot);
   } catch (error) {
     console.error("Error fetching pending orders:", error);
+    return [];
+  }
+};
+
+/**
+ * Convert a "YYYY-MM-DD" date string to Jakarta-time start/end of day Timestamps.
+ */
+const getJakartaDayRange = (dateString: string): { start: Timestamp; end: Timestamp } => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const jakartaOffsetMs = 7 * 60 * 60 * 1000;
+
+  const startUtc = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  startUtc.setTime(startUtc.getTime() - jakartaOffsetMs);
+
+  const endUtc = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  endUtc.setTime(endUtc.getTime() - jakartaOffsetMs);
+
+  return {
+    start: Timestamp.fromDate(startUtc),
+    end: Timestamp.fromDate(endUtc),
+  };
+};
+
+/**
+ * Fetches served orders from RecentlyServed for a specific date (Jakarta time).
+ * Sorted ascending by timestampServe.
+ */
+export const fetchOrdersByDate = async (
+  db: Firestore,
+  dateString: string
+): Promise<ServedOrderData[]> => {
+  try {
+    const { start, end } = getJakartaDayRange(dateString);
+
+    const recentlyServedRef = collection(db, getCollectionPath("RecentlyServed"));
+    const q = query(
+      recentlyServedRef,
+      where("timestampServe", ">=", start),
+      where("timestampServe", "<=", end),
+      orderBy("timestampServe", "asc")
+    );
+
+    const querySnapshot = await getDocs(q);
+    return processServedOrdersForUI(querySnapshot);
+  } catch (error) {
+    console.error("Error fetching orders by date:", error);
     return [];
   }
 };
