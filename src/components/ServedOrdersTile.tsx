@@ -145,6 +145,9 @@ const CustomerBadge = ({ number }: { number: string | number }) => (
   </span>
 );
 
+const toTitleCase = (s: string) =>
+  s.toLowerCase().replace(/(?:^|\s)\S/g, (c) => c.toUpperCase());
+
 const CustomerNamePill = ({
   name,
   isMember,
@@ -155,8 +158,10 @@ const CustomerNamePill = ({
   const trimmed = name.trim();
   if (!trimmed && !isMember) return null;
 
+  const display = trimmed ? toTitleCase(trimmed) : "Member";
+
   return (
-    <Tooltip text={isMember ? "Member" : "Not a member"}>
+    <Tooltip text={display}>
       <div
         className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium ${
           isMember
@@ -165,7 +170,7 @@ const CustomerNamePill = ({
         }`}
       >
         <PersonIcon className={isMember ? "text-purple-500" : "text-gray-400"} />
-        <span className="truncate max-w-[110px]">{trimmed || "Member"}</span>
+        <span className="truncate max-w-[110px]">{display}</span>
       </div>
     </Tooltip>
   );

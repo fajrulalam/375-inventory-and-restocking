@@ -69,7 +69,7 @@ const Tooltip = ({
               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
@@ -124,9 +124,7 @@ const CustomerBadge = ({ number }: { number: string | number }) => (
 );
 
 const toTitleCase = (str: string) =>
-  str
-    .toLowerCase()
-    .replace(/(?:^|\s)\S/g, (c) => c.toUpperCase());
+  str.toLowerCase().replace(/(?:^|\s)\S/g, (c) => c.toUpperCase());
 
 const CustomerNamePill = ({
   name,
@@ -142,8 +140,8 @@ const CustomerNamePill = ({
   const tooltipText = trimmed
     ? `${displayName}${isMember ? " · Member" : ""}`
     : isMember
-    ? "Member"
-    : "Not a member";
+      ? "Member"
+      : "Not a member";
 
   return (
     <Tooltip text={tooltipText}>
@@ -154,7 +152,9 @@ const CustomerNamePill = ({
             : "bg-gray-100 text-gray-600"
         }`}
       >
-        <PersonIcon className={isMember ? "text-purple-500" : "text-gray-400"} />
+        <PersonIcon
+          className={isMember ? "text-purple-500" : "text-gray-400"}
+        />
         <span className="truncate max-w-[110px]">{displayName}</span>
       </div>
     </Tooltip>
@@ -213,12 +213,10 @@ const OrderCard = ({ order }: { order: ServedOrderData }) => {
             <div className="flex items-center gap-1 text-[11px] text-gray-500">
               <ClockIcon className="text-gray-400" />
               <span className="tabular-nums">
-                {order.timestampServe
-                  .toDate()
-                  .toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                {order.timestampServe.toDate().toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </span>
               <span className="font-semibold text-emerald-600 tabular-nums">
                 {formatFriendlyTime(serveTimeMinutes)}
@@ -306,7 +304,12 @@ export default function TransactionModal({
 
   // Fetch orders when switching to the orders tab
   useEffect(() => {
-    if (activeTab === "orders" && tile && orders.length === 0 && !isOrdersLoading) {
+    if (
+      activeTab === "orders" &&
+      tile &&
+      orders.length === 0 &&
+      !isOrdersLoading
+    ) {
       setIsOrdersLoading(true);
       fetchOrdersByDate(db, tile.date)
         .then(setOrders)
@@ -328,22 +331,30 @@ export default function TransactionModal({
 
   // --- Items tab helpers ---
   const excludedItemNames = new Set([
-    "subTotal", "totalCash", "totalQris", "totalOnline",
-    "actualCash", "actualOnline", "actualQris",
-    "closingCash", "closingOnline", "closingQris",
+    "subTotal",
+    "totalCash",
+    "totalQris",
+    "totalOnline",
+    "TotalOnline",
+    "actualCash",
+    "actualOnline",
+    "actualQris",
+    "closingCash",
+    "closingOnline",
+    "closingQris",
   ]);
   const displayItems = tile.items.filter(
-    (item) => !excludedItemNames.has(item.name)
+    (item) => !excludedItemNames.has(item.name),
   );
   const voucherItems = displayItems.filter((item) =>
-    item.name.toLowerCase().includes("voucher")
+    item.name.toLowerCase().includes("voucher"),
   );
   const regularItems = displayItems.filter(
-    (item) => !item.name.toLowerCase().includes("voucher")
+    (item) => !item.name.toLowerCase().includes("voucher"),
   );
   const foodItems = regularItems.filter((item) => item.category === "food");
   const beverageItems = regularItems.filter(
-    (item) => item.category === "beverage"
+    (item) => item.category === "beverage",
   );
 
   const sortItems = (items: TransactionItem[]) => {
@@ -356,7 +367,7 @@ export default function TransactionModal({
   const renderItemGroup = (
     title: string,
     items: TransactionItem[],
-    accent = false
+    accent = false,
   ) => {
     if (items.length === 0) return null;
     return (
@@ -395,9 +406,7 @@ export default function TransactionModal({
   };
 
   // --- Orders tab helpers ---
-  const baseOrders = memberOnly
-    ? orders.filter((o) => o.isMember)
-    : orders;
+  const baseOrders = memberOnly ? orders.filter((o) => o.isMember) : orders;
   const filteredOrders =
     paymentFilter === "All"
       ? baseOrders
@@ -433,8 +442,8 @@ export default function TransactionModal({
                 ? "scale-100 opacity-100"
                 : "translate-y-0 opacity-100"
               : isDesktop
-              ? "scale-95 opacity-0"
-              : "translate-y-full opacity-0"
+                ? "scale-95 opacity-0"
+                : "translate-y-full opacity-0"
           }
         `}
         onClick={(e) => e.stopPropagation()}
@@ -603,7 +612,7 @@ export default function TransactionModal({
                         {paymentCounts[method]}
                       </span>
                     </button>
-                  )
+                  ),
                 )}
 
                 <div className="w-px h-5 bg-gray-200" />
@@ -616,7 +625,9 @@ export default function TransactionModal({
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  <PersonIcon className={memberOnly ? "text-purple-200" : "text-gray-400"} />
+                  <PersonIcon
+                    className={memberOnly ? "text-purple-200" : "text-gray-400"}
+                  />
                   Member
                   <span
                     className={`ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums ${
