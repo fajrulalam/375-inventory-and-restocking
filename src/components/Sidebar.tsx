@@ -105,6 +105,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               </Link>
             );
           })}
+
+          {/* External link */}
+          <a
+            href="https://canteen-375-registration.vercel.app/leaderboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onClose}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path fillRule="evenodd" d="M10 1c-1.828 0-3.623.149-5.371.435a.75.75 0 00-.629.74v.387c-.827.157-1.642.345-2.445.564a.75.75 0 00-.552.698c-.028 1.036.138 2.049.474 3.003a.75.75 0 00.582.493 13.215 13.215 0 002.886.395c.478.933 1.09 1.783 1.813 2.52A6.087 6.087 0 015 13.5a.75.75 0 00.735.9h8.53a.75.75 0 00.735-.9 6.087 6.087 0 01-1.758-3.263c.724-.737 1.335-1.587 1.813-2.52a13.215 13.215 0 002.886-.395.75.75 0 00.582-.493 7.117 7.117 0 00.474-3.003.75.75 0 00-.552-.698A28.477 28.477 0 0016 2.562v-.387a.75.75 0 00-.629-.74A29.15 29.15 0 0010 1zM6.75 15.5a.75.75 0 00-.75.75v1a.75.75 0 00.75.75h6.5a.75.75 0 00.75-.75v-1a.75.75 0 00-.75-.75h-6.5z" clipRule="evenodd" />
+            </svg>
+            Leaderboard Member
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 ml-auto text-gray-400">
+              <path fillRule="evenodd" d="M4.22 11.78a.75.75 0 010-1.06L9.44 5.5H5.75a.75.75 0 010-1.5h5.5a.75.75 0 01.75.75v5.5a.75.75 0 01-1.5 0V6.56l-5.22 5.22a.75.75 0 01-1.06 0z" clipRule="evenodd" />
+            </svg>
+          </a>
         </nav>
 
         {/* Footer */}
