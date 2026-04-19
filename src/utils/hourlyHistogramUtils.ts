@@ -128,7 +128,7 @@ export const getCurrentHourJakarta = (): number => {
  */
 const initializeHourlyAggregates = () => {
   const hourlyAggregates: Record<string, HourlyAggregate> = {};
-  for (let i = 8; i < 16; i++) {
+  for (let i = 8; i < 17; i++) {
     hourlyAggregates[`${i}:00-${i + 1}:00`] = {
       items: 0,
       pendingItems: 0,
@@ -163,15 +163,16 @@ const processServedOrdersData = (
 
       const hour = jakartaDate.getHours();
 
-      // Only count items from 8AM to 4PM
-      if (hour >= 8 && hour < 16) {
+      // Only count items from 8AM to 5PM
+      if (hour >= 8 && hour < 17) {
         const hourKey = `${hour}:00-${hour + 1}:00`;
 
         // Aggregate data
         if (Array.isArray(data.orderItems)) {
           data.orderItems.forEach((item) => {
-            if (item.quantity) {
-              hourlyAggregates[hourKey].items += item.quantity;
+            const totalQuantity = (item.quantity || 0) + (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0);
+            if (totalQuantity > 0) {
+              hourlyAggregates[hourKey].items += totalQuantity;
             }
           });
         }
@@ -233,15 +234,15 @@ const processPendingOrdersData = (
 
       const hour = jakartaDate.getHours();
 
-      // Only count items from 8AM to 4PM
-      if (hour >= 8 && hour < 16) {
+      // Only count items from 8AM to 5PM
+      if (hour >= 8 && hour < 17) {
         const hourKey = `${hour}:00-${hour + 1}:00`;
 
         // Aggregate data
         if (Array.isArray(data.orderItems)) {
           data.orderItems.forEach((item) => {
             const totalQuantity =
-              (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0);
+              (item.quantity || 0) + (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0);
             if (totalQuantity > 0) {
               hourlyAggregates[hourKey].pendingItems += totalQuantity;
             }
@@ -303,7 +304,7 @@ export const setupRealtimeUpdates = (
     recentlyServedRef,
     where("timestampServe", ">=", startOfDay),
     orderBy("timestampServe", "desc"),
-    limit(50)
+    limit(500)
   );
 
   // Set up listener for Status collection
@@ -311,7 +312,7 @@ export const setupRealtimeUpdates = (
   const statusQuery = query(
     statusRef,
     orderBy("waktuPesan", "desc"),
-    limit(50)
+    limit(500)
   );
 
   // Set up real-time listeners
@@ -368,9 +369,9 @@ const processServedOrdersForUI = (
     const orderItems = Array.isArray(data.orderItems)
       ? data.orderItems.map((item) => ({
           namaPesanan: item.namaPesanan || "",
-          quantity: item.quantity || 0,
-          preparedQuantity: item.preparedQuantity || 0,
-          orderType: item.orderType || "dine-in",
+          quantity: (item.quantity || 0) + (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0),
+          preparedQuantity: (item.preparedQuantity || 0) + (item.dineInPreparedQuantity || 0) + (item.takeAwayPreparedQuantity || 0),
+          orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
           selectedOptions: Array.isArray(item.selectedOptions)
             ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
                 groupId: (opt.groupId as string) || "",
@@ -415,9 +416,9 @@ const processPendingOrdersForUI = (
     const orderItems = Array.isArray(data.orderItems)
       ? data.orderItems.map((item) => ({
           namaPesanan: item.namaPesanan || "",
-          dineInQuantity: item.dineInQuantity || 0,
-          takeAwayQuantity: item.takeAwayQuantity || 0,
-          orderType: item.takeAwayQuantity > 0 ? "take-away" : "dine-in",
+          dineInQuantity: (item.dineInQuantity || 0) + (!item.orderType || item.orderType === "dine-in" ? (item.quantity || 0) : 0),
+          takeAwayQuantity: (item.takeAwayQuantity || 0) + (item.orderType === "take-away" ? (item.quantity || 0) : 0),
+          orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
           selectedOptions: Array.isArray(item.selectedOptions)
             ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
                 groupId: (opt.groupId as string) || "",
@@ -628,7 +629,7 @@ export const fetchTodayServedOrders = async (
       recentlyServedRef,
       where("timestampServe", ">=", startOfDay),
       orderBy("timestampServe", "desc"),
-      limit(50) // Limit to 50 most recent orders
+      limit(500) // Limit to 500 most recent orders
     );
 
     const querySnapshot = await getDocs(q);
@@ -654,7 +655,7 @@ export const fetchPendingOrders = async (
       statusCollection,
       // No timestamp filter as we want all pending orders regardless of when they were created
       orderBy("waktuPesan", "desc"),
-      limit(50) // Limit to 50 most recent orders
+      limit(500) // Limit to 500 most recent orders
     );
 
     const querySnapshot = await getDocs(q);
