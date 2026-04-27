@@ -68,6 +68,9 @@ export interface DailyTransactionData {
   anchorCash?: number;
   anchorQris?: number;
   anchorOnline?: number;
+  confirmedDeltaCash?: number;
+  confirmedDeltaQris?: number;
+  confirmedDeltaOnline?: number;
 }
 
 export interface ExpenseData {
@@ -147,6 +150,9 @@ export async function fetchDailyTransactionsForMonth(
       anchorCash: data.anchorCash,
       anchorQris: data.anchorQris,
       anchorOnline: data.anchorOnline,
+      confirmedDeltaCash: data.confirmedDeltaCash,
+      confirmedDeltaQris: data.confirmedDeltaQris,
+      confirmedDeltaOnline: data.confirmedDeltaOnline,
     });
   });
   return results;
@@ -311,8 +317,11 @@ export async function confirmDiscrepancy(
     confirmedDeltaCash: deltaCash,
     confirmedDeltaQris: deltaQris,
     confirmedDeltaOnline: deltaOnline,
-    total: oldTotal + totalDelta,
-    subTotal: oldSubTotal + totalDelta,
+    total: increment(totalDelta),
+    subTotal: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
   });
 
   const monthRef = doc(db, getCollectionPath("MonthlyTransaction"), monthId);
@@ -381,8 +390,11 @@ export async function rejectDiscrepancy(
     discrepancyCash: deltaCash,
     discrepancyQris: deltaQris,
     discrepancyOnline: deltaOnline,
-    total: oldTotal + totalDelta,
-    subTotal: oldSubTotal + totalDelta,
+    total: increment(totalDelta),
+    subTotal: increment(totalDelta),
+    totalCash: increment(deltaCash),
+    totalQris: increment(deltaQris),
+    totalOnline: increment(deltaOnline),
   });
 
   const monthRef = doc(db, getCollectionPath("MonthlyTransaction"), monthId);
@@ -503,8 +515,11 @@ export async function undoDiscrepancyConfirmation(
     confirmedDeltaCash: deleteField(),
     confirmedDeltaQris: deleteField(),
     confirmedDeltaOnline: deleteField(),
-    total: data.preConfirmTotal ?? data.total,
-    subTotal: data.preConfirmSubTotal ?? data.subTotal,
+    total: increment(-totalDelta),
+    subTotal: increment(-totalDelta),
+    totalCash: increment(-deltaCash),
+    totalQris: increment(-deltaQris),
+    totalOnline: increment(-deltaOnline),
   };
 
   // Restore original actuals + discrepancy if they were overridden during reject
@@ -645,10 +660,11 @@ export function buildCashflowRows(
     let rowCount = 0;
 
     if (txn) {
-      // Sales — always use system-recorded totals
-      const sCash = txn.totalCash ?? 0;
-      const sOnline = txn.totalOnline ?? 0;
-      const sQris = txn.totalQris ?? 0;
+      // Sales — always use system-recorded totals.
+      // Subtract confirmed delta so the "Sales" row reflects original system sales even after confirmation.
+      const sCash = (txn.totalCash ?? 0) - (txn.confirmedDeltaCash ?? 0);
+      const sOnline = (txn.totalOnline ?? 0) - (txn.confirmedDeltaOnline ?? 0);
+      const sQris = (txn.totalQris ?? 0) - (txn.confirmedDeltaQris ?? 0);
 
       cashBal += sCash;
       qrisBal += sQris;

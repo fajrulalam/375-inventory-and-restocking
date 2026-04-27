@@ -163,7 +163,17 @@ export const transformToTileData = (transactions: DailyTransactionData[]): Daily
     // Define excluded keys (same as in TransactionTile.tsx)
     const excludedKeys = [
       "year", "date", "month", "timestamp", 
-      "customerNumber", "total", "voucher", "day"
+      "customerNumber", "total", "voucher", "day",
+      "isDiscrepancyConfirmed", "preConfirmTotal", "preConfirmSubTotal",
+      "confirmedDeltaCash", "confirmedDeltaQris", "confirmedDeltaOnline",
+      "originalActualCash", "originalActualQris", "originalActualOnline",
+      "originalDiscrepancyCash", "originalDiscrepancyQris", "originalDiscrepancyOnline",
+      "preAnchorClosingCash", "preAnchorClosingQris", "preAnchorClosingOnline",
+      "anchorCash", "anchorQris", "anchorOnline", "subTotal", "totalCash", 
+      "totalQris", "totalOnline", "actualCash", "actualQris", "actualOnline",
+      "discrepancyCash", "discrepancyQris", "discrepancyOnline", "closingCash", 
+      "closingQris", "closingOnline", "grossCash", "grossQris", "grossOnline", 
+      "expensesCash", "expensesQris", "expensesOnline"
     ];
     
     // Process items - check both nested items field and direct fields
@@ -246,7 +256,17 @@ export const calculateWeeklyMedians = (transactions: DailyTransactionData[]): We
 export const extractUniqueItems = (transactions: DailyTransactionData[]): string[] => {
   const excludedKeys = [
     "year", "date", "month", "timestamp", 
-    "customerNumber", "total", "voucher", "day"
+    "customerNumber", "total", "voucher", "day",
+    "isDiscrepancyConfirmed", "preConfirmTotal", "preConfirmSubTotal",
+    "confirmedDeltaCash", "confirmedDeltaQris", "confirmedDeltaOnline",
+    "originalActualCash", "originalActualQris", "originalActualOnline",
+    "originalDiscrepancyCash", "originalDiscrepancyQris", "originalDiscrepancyOnline",
+    "preAnchorClosingCash", "preAnchorClosingQris", "preAnchorClosingOnline",
+    "anchorCash", "anchorQris", "anchorOnline", "subTotal", "totalCash", 
+    "totalQris", "totalOnline", "actualCash", "actualQris", "actualOnline",
+    "discrepancyCash", "discrepancyQris", "discrepancyOnline", "closingCash", 
+    "closingQris", "closingOnline", "grossCash", "grossQris", "grossOnline", 
+    "expensesCash", "expensesQris", "expensesOnline"
   ];
   
   const uniqueItems = new Set<string>();

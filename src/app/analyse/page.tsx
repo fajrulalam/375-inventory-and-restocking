@@ -12,6 +12,7 @@ import TransactionModal from "@/components/TransactionModal";
 import WeeklyMedianModal from "@/components/WeeklyMedianModal";
 import BoxPlotModal from "@/components/BoxPlotModal";
 import ItemFilter from "@/components/ItemFilter";
+import Sidebar from "@/components/Sidebar";
 import { firebaseConfig } from "@/config/firebase";
 import {
   fetchAnalysisData,
@@ -29,12 +30,13 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export default function AnalyseHistoricalData() {
-  const { isTestingMode } = useTestingMode();
+  const { isTestingMode, toggleTestingMode } = useTestingMode();
   const [dailyTiles, setDailyTiles] = useState<DailyTileData[]>([]);
   const [weeklyMedians, setWeeklyMedians] = useState<WeeklyMedianData[]>([]);
   const [selectedDays, setSelectedDays] = useState<number>(14);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTile, setSelectedTile] = useState<DailyTileData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedWeeklyMedian, setSelectedWeeklyMedian] = useState<WeeklyMedianData | null>(null);
@@ -129,40 +131,73 @@ export default function AnalyseHistoricalData() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header Section */}
-        <div className="flex justify-between items-center mb-12">
-          <h1 className="text-3xl font-bold text-slate-800 flex items-center">
+        <div className="flex justify-between items-center mb-10">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-xl text-gray-500 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all duration-150"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
             <Image
               src="/assets/375_logo.png"
               alt="375 Logo"
-              width={40}
-              height={40}
-              className="mr-4"
+              width={32}
+              height={32}
             />
-            Historical Analysis
-          </h1>
-          <Link
-            href="/"
-            className="flex items-center px-4 py-2 text-sm font-semibold rounded-xl text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-200 shadow-sm"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 leading-tight">
+                Historical Analysis
+              </h1>
+              <p className="text-xs text-gray-400">Insights & Trends</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTestingMode}
+              className={`p-2 rounded-xl border transition-all duration-200 ${
+                isTestingMode
+                  ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-300 ring-offset-1 shadow-sm"
+                  : "text-gray-400 bg-white border-gray-100 hover:text-gray-600 hover:border-gray-200 shadow-sm"
+              }`}
+              title={isTestingMode ? "Testing mode ON" : "Testing mode OFF"}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
-            Dashboard
-          </Link>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-4.5 h-4.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 013.55.621l.502.164a12.826 12.826 0 003.78.596 8.65 8.65 0 01-6.373-.1l-.331-.125a6.75 6.75 0 00-2.94-.423L2.785 14.07c-.163.163-.163.427 0 .59l2.424 2.424c.164.164.428.164.591 0l3.072-3.072a2.75 2.75 0 011.944-.806h4.644A2.5 2.5 0 0018 10.75V9.5a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586L8.5 3.528z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+            <Link
+              href="/"
+              className="flex items-center px-4 py-2 text-sm font-semibold rounded-xl text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-200 shadow-sm"
+            >
+              Dashboard
+            </Link>
+          </div>
         </div>
 
         {/* Date Picker Section */}

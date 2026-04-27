@@ -54,6 +54,7 @@ export interface OrderItemData {
   quantity: number;
   preparedQuantity: number;
   orderType: string;
+  harga: number;
   selectedOptions?: SelectedOption[];
 }
 
@@ -91,6 +92,7 @@ export interface PendingOrderItemData {
   dineInQuantity: number;
   takeAwayQuantity: number;
   orderType?: string; // Calculated field
+  harga: number;
   selectedOptions?: SelectedOption[];
 }
 
@@ -380,6 +382,7 @@ const processServedOrdersForUI = (
           quantity: (item.quantity || 0) + (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0),
           preparedQuantity: (item.preparedQuantity || 0) + (item.dineInPreparedQuantity || 0) + (item.takeAwayPreparedQuantity || 0),
           orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
+          harga: item.harga || 0,
           selectedOptions: Array.isArray(item.selectedOptions)
             ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
                 groupId: (opt.groupId as string) || "",
@@ -427,6 +430,7 @@ const processPendingOrdersForUI = (
           dineInQuantity: (item.dineInQuantity || 0) + (!item.orderType || item.orderType === "dine-in" ? (item.quantity || 0) : 0),
           takeAwayQuantity: (item.takeAwayQuantity || 0) + (item.orderType === "take-away" ? (item.quantity || 0) : 0),
           orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
+          harga: item.harga || 0,
           selectedOptions: Array.isArray(item.selectedOptions)
             ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
                 groupId: (opt.groupId as string) || "",

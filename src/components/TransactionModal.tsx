@@ -243,7 +243,14 @@ const OrderCard = ({ order }: { order: ServedOrderData }) => {
                 <span className="font-medium text-gray-900 text-sm">
                   {item.namaPesanan}
                 </span>
-                <QuantityBadge>&times;{item.quantity}</QuantityBadge>
+                <div className="flex items-center gap-3">
+                  {item.harga > 0 && (
+                    <span className="text-xs font-semibold text-gray-600">
+                      {formatCurrency(item.quantity * item.harga)}
+                    </span>
+                  )}
+                  <QuantityBadge>&times;{item.quantity}</QuantityBadge>
+                </div>
               </div>
               <OptionPills options={item.selectedOptions || []} />
             </div>
