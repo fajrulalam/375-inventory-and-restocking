@@ -78,10 +78,10 @@ const HourlyHistogram = ({
       // For revenue, use the direct values
       return {
         baseValue: item.revenue,
-        stackValue: item.pendingTotal,
+        stackValue: item.pendingRevenue || 0,
         baseLabel: 'Served',
         stackLabel: 'In Progress',
-        totalValue: item.revenue + item.pendingTotal
+        totalValue: item.revenue + (item.pendingRevenue || 0)
       };
     } else if (dataType === 'customerCount') {
       // For customer count, estimate pending customers (1 per pending item, max 1)

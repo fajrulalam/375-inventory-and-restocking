@@ -35,6 +35,7 @@ interface HourlyAggregate {
   items: number;
   pendingItems: number;
   revenue: number;
+  pendingRevenue: number;
   customerNumbers: Set<string>;
 }
 
@@ -133,6 +134,7 @@ const initializeHourlyAggregates = () => {
       items: 0,
       pendingItems: 0,
       revenue: 0,
+      pendingRevenue: 0,
       customerNumbers: new Set(),
     };
   }
@@ -238,7 +240,7 @@ const processPendingOrdersData = (
       if (hour >= 8 && hour < 17) {
         const hourKey = `${hour}:00-${hour + 1}:00`;
 
-        // Aggregate data
+        // Aggregate items
         if (Array.isArray(data.orderItems)) {
           data.orderItems.forEach((item) => {
             const totalQuantity =
@@ -247,6 +249,11 @@ const processPendingOrdersData = (
               hourlyAggregates[hourKey].pendingItems += totalQuantity;
             }
           });
+        }
+        
+        // Aggregate revenue from pending orders
+        if (typeof data.total === "number") {
+          hourlyAggregates[hourKey].pendingRevenue += data.total;
         }
       }
     }
@@ -269,6 +276,7 @@ const convertToHourlyDataItems = (
       total: hourlyAggregates[hourKey].items,
       pendingTotal: hourlyAggregates[hourKey].pendingItems,
       revenue: hourlyAggregates[hourKey].revenue,
+      pendingRevenue: hourlyAggregates[hourKey].pendingRevenue,
       customerCount: hourlyAggregates[hourKey].customerNumbers.size,
       isCurrent: parseInt(hourKey.split(":")[0]) === currentHour,
     })
@@ -555,8 +563,8 @@ export const calculateHistogramStatistics = (
     if (dataField === "total") {
       return Math.max(max, item.total + item.pendingTotal);
     } else if (dataField === "revenue") {
-      // For revenue, use the actual values from both collections
-      return Math.max(max, item.revenue + item.pendingTotal);
+      // For revenue, sum served revenue and pending revenue
+      return Math.max(max, item.revenue + (item.pendingRevenue || 0));
     } else if (dataField === "customerCount") {
       // For customer count, we can factor in pending customers
       // Using a simple approximation (each pending order = 1 customer)

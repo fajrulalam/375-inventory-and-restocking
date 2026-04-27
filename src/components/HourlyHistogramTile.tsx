@@ -39,7 +39,7 @@ const HourlyHistogramTile = ({
     // Calculate the maximum combined value for revenue
     const maxRevenue = data.reduce((max, item) => {
       // Use the actual value for pending revenue
-      return Math.max(max, item.revenue + item.pendingTotal);
+      return Math.max(max, item.revenue + (item.pendingRevenue || 0));
     }, 0);
 
     if (maxRevenue < 200000) return 50000;
