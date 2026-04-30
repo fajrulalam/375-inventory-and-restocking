@@ -273,7 +273,7 @@ function RejectDiscrepancyModal({ info, onReject, onClose, loading }: { info: Di
   );
 }
 
-function AnchorBalanceModal({ txnData, onAnchor, onClose, loading }: { txnData: DailyTransactionData[]; onAnchor: (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => void; onClose: () => void; loading: boolean }) {
+function AnchorBalanceModal({ txnData, allRows, onAnchor, onClose, loading }: { txnData: DailyTransactionData[]; allRows: CashflowRow[]; onAnchor: (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => void; onClose: () => void; loading: boolean }) {
   const fmtInput = (n: number) => new Intl.NumberFormat("id-ID").format(n);
   const parseInput = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
   const dates = txnData.map((t) => t.date);
@@ -283,27 +283,49 @@ function AnchorBalanceModal({ txnData, onAnchor, onClose, loading }: { txnData: 
   const [cashEnabled, setCashEnabled] = useState(true);
   const [qrisEnabled, setQrisEnabled] = useState(false);
   const [onlineEnabled, setOnlineEnabled] = useState(false);
-  const [cash, setCash] = useState(fmtInput(txn?.closingCash ?? 0));
-  const [qris, setQris] = useState(fmtInput(txn?.closingQris ?? 0));
-  const [online, setOnline] = useState(fmtInput(txn?.closingOnline ?? 0));
+
+  // Find the calculated balance for the selected date from allRows
+  const getCalculatedBalances = (date: string) => {
+    const dayRows = allRows.filter((r) => r.rawDate === date);
+    // Use the last row for that day that isn't an adjustment or the month-closing row
+    const lastRow = dayRows.findLast((r) => r.rowType !== "adjustment" && r.rowType !== "closing");
+    if (lastRow) {
+      return {
+        cash: lastRow.cashBalance,
+        qris: lastRow.qrisBalance,
+        online: lastRow.onlineBalance
+      };
+    }
+    // Fallback to raw data if no rows found
+    const t = txnData.find((t) => t.date === date);
+    return {
+      cash: t?.closingCash ?? 0,
+      qris: t?.closingQris ?? 0,
+      online: t?.closingOnline ?? 0
+    };
+  };
+
+  const initialBalances = getCalculatedBalances(selectedDate);
+  const [cash, setCash] = useState(fmtInput(initialBalances.cash));
+  const [qris, setQris] = useState(fmtInput(initialBalances.qris));
+  const [online, setOnline] = useState(fmtInput(initialBalances.online));
 
   const handleDateChange = (d: string) => {
     setSelectedDate(d);
-    const t = txnData.find((t) => t.date === d);
-    if (t) {
-      setCash(fmtInput(t.closingCash));
-      setQris(fmtInput(t.closingQris));
-      setOnline(fmtInput(t.closingOnline));
-    }
+    const balances = getCalculatedBalances(d);
+    setCash(fmtInput(balances.cash));
+    setQris(fmtInput(balances.qris));
+    setOnline(fmtInput(balances.online));
   };
   const handleChange = (raw: string, setter: (v: string) => void) => {
     const num = parseInput(raw);
     setter(num === 0 && raw !== "0" && raw !== "" ? "" : fmtInput(num));
   };
 
-  const curCash = txn?.closingCash ?? 0;
-  const curQris = txn?.closingQris ?? 0;
-  const curOnline = txn?.closingOnline ?? 0;
+  const balances = getCalculatedBalances(selectedDate);
+  const curCash = balances.cash;
+  const curQris = balances.qris;
+  const curOnline = balances.online;
   const parsedCash = parseInput(cash);
   const parsedQris = parseInput(qris);
   const parsedOnline = parseInput(online);
@@ -850,7 +872,7 @@ export default function CashflowPage() {
 
       {showBalanceModal && <OpeningBalanceModal balance={openingBalance} onSave={handleSaveBalance} onClose={() => setShowBalanceModal(false)} />}
       {showExpenseModal && <AddExpenseModal onSave={handleAddExpense} onClose={() => setShowExpenseModal(false)} />}
-      {showAnchorModal && <AnchorBalanceModal txnData={txnData} onAnchor={handleAnchorBalance} onClose={() => setShowAnchorModal(false)} loading={anchorLoading} />}
+      {showAnchorModal && <AnchorBalanceModal txnData={txnData} allRows={allRows} onAnchor={handleAnchorBalance} onClose={() => setShowAnchorModal(false)} loading={anchorLoading} />}
       {discrepancyModal?.type === "confirm" && <ConfirmDiscrepancyModal info={discrepancyModal.info} onConfirm={handleConfirmDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
       {discrepancyModal?.type === "reject" && <RejectDiscrepancyModal info={discrepancyModal.info} onReject={handleRejectDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
       {discrepancyModal?.type === "undo" && <UndoDiscrepancyModal dateFmt={discrepancyModal.info.dateFmt} onUndo={handleUndoDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
