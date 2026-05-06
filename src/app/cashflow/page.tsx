@@ -589,7 +589,12 @@ export default function CashflowPage() {
   const closingOnline = closingRow?.onlineBalance ?? 0;
 
   const handleAccountToggle = (acct: AccountType) => setActiveAccount((p) => (p === acct ? null : acct));
-  const handleSaveBalance = async (b: OpeningBalance) => { setShowBalanceModal(false); setOpeningBalance(b); await saveOpeningBalance(db, selectedMonth, b); loadData(); };
+  const handleSaveBalance = async (b: OpeningBalance) => {
+    setShowBalanceModal(false);
+    setOpeningBalance(b);
+    await saveOpeningBalance(db, selectedMonth, b, true);
+    loadData();
+  };
   const handleAddExpense = async (d: { amount: number; category: string; sourceAccount: string }) => { setShowExpenseModal(false); await addExpense(db, d); loadData(); };
   const handleDownloadPDF = () => { if (allRows.length > 0) generateCashflowPDF(allRows, formatMonthLabel(selectedMonth)); };
 

@@ -253,7 +253,8 @@ export async function fetchOpeningBalance(
 export async function saveOpeningBalance(
   db: Firestore,
   monthId: string,
-  balance: OpeningBalance
+  balance: OpeningBalance,
+  syncTransactions: boolean = false
 ): Promise<void> {
   const settingsRef = doc(
     db,
@@ -261,6 +262,88 @@ export async function saveOpeningBalance(
     monthId
   );
   await setDoc(settingsRef, balance, { merge: true });
+
+  if (syncTransactions) {
+    await syncDailyTransactionsWithOpeningBalance(db, monthId, balance);
+  }
+}
+
+/**
+ * Recalculates all closingCash, closingQris, and closingOnline values for a month
+ * based on a new opening balance and updates the DailyTransaction documents.
+ */
+export async function syncDailyTransactionsWithOpeningBalance(
+  db: Firestore,
+  monthId: string,
+  opening: OpeningBalance
+): Promise<void> {
+  const transactions = await fetchDailyTransactionsForMonth(db, monthId);
+  const expenses = await fetchExpensesForMonth(db, monthId);
+
+  let cashBal = opening.openingCash;
+  let qrisBal = opening.openingQris;
+  let onlineBal = opening.openingOnline;
+
+  // Group expenses by Jakarta date
+  const expByDate: Record<string, ExpenseData[]> = {};
+  for (const e of expenses) {
+    const jkt = new Date(
+      e.timestamp.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+    );
+    const y = jkt.getFullYear();
+    const m = String(jkt.getMonth() + 1).padStart(2, "0");
+    const d = String(jkt.getDate()).padStart(2, "0");
+    const key = `${y}-${m}-${d}`;
+    (expByDate[key] ??= []).push(e);
+  }
+
+  const batch = writeBatch(db);
+  const dailyRef = collection(db, getCollectionPath("DailyTransaction"));
+
+  // Sort transactions by date to ensure correct accumulation
+  const sortedTxns = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+
+  for (const txn of sortedTxns) {
+    const dateStr = txn.date;
+    const dayExp = expByDate[dateStr] ?? [];
+
+    // 1. Add Sales (using confirmed logic to get original system sales)
+    const sCash = (txn.totalCash ?? 0) - (txn.confirmedDeltaCash ?? 0);
+    const sOnline = (txn.totalOnline ?? 0) - (txn.confirmedDeltaOnline ?? 0);
+    const sQris = (txn.totalQris ?? 0) - (txn.confirmedDeltaQris ?? 0);
+
+    cashBal += sCash;
+    qrisBal += sQris;
+    onlineBal += sOnline;
+
+    // 2. Add Discrepancies
+    cashBal += txn.discrepancyCash ?? 0;
+    qrisBal += txn.discrepancyQris ?? 0;
+    onlineBal += txn.discrepancyOnline ?? 0;
+
+    // 3. Apply Anchors (if any)
+    if (txn.anchorCash !== undefined) cashBal = txn.anchorCash;
+    if (txn.anchorQris !== undefined) qrisBal = txn.anchorQris;
+    if (txn.anchorOnline !== undefined) onlineBal = txn.anchorOnline;
+
+    // 4. Subtract Expenses
+    for (const exp of dayExp) {
+      const acct = normalizeAccount(exp.sourceAccount);
+      if (acct === "cash") cashBal -= exp.amount;
+      if (acct === "qris") qrisBal -= exp.amount;
+      if (acct === "online") onlineBal -= exp.amount;
+    }
+
+    // 5. Update the document with the new closing values
+    const docRef = doc(dailyRef, dateStr);
+    batch.update(docRef, {
+      closingCash: cashBal,
+      closingQris: qrisBal,
+      closingOnline: onlineBal,
+    });
+  }
+
+  await batch.commit();
 }
 
 export async function addExpense(
