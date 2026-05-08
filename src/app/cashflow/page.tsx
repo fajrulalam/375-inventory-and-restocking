@@ -12,7 +12,7 @@ import {
   CashflowRow,
   OpeningBalance,
   fetchAvailableMonths,
-  fetchDailyTransactionsForMonth,
+  fetchDailyFinancialReportsForMonth,
   fetchExpensesForMonth,
   fetchOpeningBalance,
   saveOpeningBalance,
@@ -27,7 +27,7 @@ import {
   undoDiscrepancyConfirmation,
   anchorBalance,
   undoAnchor,
-  DailyTransactionData,
+  DailyFinancialReportData,
   formatDayLabel,
 } from "@/utils/cashflowUtils";
 
@@ -273,7 +273,7 @@ function RejectDiscrepancyModal({ info, onReject, onClose, loading }: { info: Di
   );
 }
 
-function AnchorBalanceModal({ txnData, allRows, onAnchor, onClose, loading }: { txnData: DailyTransactionData[]; allRows: CashflowRow[]; onAnchor: (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => void; onClose: () => void; loading: boolean }) {
+function AnchorBalanceModal({ txnData, allRows, onAnchor, onClose, loading }: { txnData: DailyFinancialReportData[]; allRows: CashflowRow[]; onAnchor: (dateStr: string, anchors: { cash?: number; qris?: number; online?: number }) => void; onClose: () => void; loading: boolean }) {
   const fmtInput = (n: number) => new Intl.NumberFormat("id-ID").format(n);
   const parseInput = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
   const dates = txnData.map((t) => t.date);
@@ -535,7 +535,7 @@ export default function CashflowPage() {
   const [months, setMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [allRows, setAllRows] = useState<CashflowRow[]>([]);
-  const [txnData, setTxnData] = useState<DailyTransactionData[]>([]);
+  const [txnData, setTxnData] = useState<DailyFinancialReportData[]>([]);
   const [openingBalance, setOpeningBalance] = useState<OpeningBalance>({ openingCash: 0, openingQris: 0, openingOnline: 0 });
   const [activeAccount, setActiveAccount] = useState<AccountType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -572,7 +572,7 @@ export default function CashflowPage() {
     if (!selectedMonth) return;
     setIsLoading(true);
     try {
-      const [txns, expenses, opening] = await Promise.all([fetchDailyTransactionsForMonth(db, selectedMonth), fetchExpensesForMonth(db, selectedMonth), fetchOpeningBalance(db, selectedMonth)]);
+      const [txns, expenses, opening] = await Promise.all([fetchDailyFinancialReportsForMonth(db, selectedMonth), fetchExpensesForMonth(db, selectedMonth), fetchOpeningBalance(db, selectedMonth)]);
       setOpeningBalance(opening);
       setTxnData(txns);
       setAllRows(buildCashflowRows(txns, expenses, opening));
@@ -601,9 +601,9 @@ export default function CashflowPage() {
   const openDiscrepancyModal = (row: CashflowRow, type: "confirm" | "reject" | "undo") => {
     const txn = txnData.find((t) => t.date === row.rawDate);
     if (!txn) return;
-    const tCash = txn.totalCash ?? 0;
-    const tQris = txn.totalQris ?? 0;
-    const tOnline = txn.totalOnline ?? 0;
+    const tCash = txn.systemSalesCash ?? 0;
+    const tQris = txn.systemSalesQris ?? 0;
+    const tOnline = txn.systemSalesOnline ?? 0;
     const info: DiscrepancyInfo = {
       dateStr: row.rawDate,
       dateFmt: formatDayLabel(row.rawDate),
