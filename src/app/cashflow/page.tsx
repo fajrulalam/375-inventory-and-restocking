@@ -278,7 +278,6 @@ function AnchorBalanceModal({ txnData, allRows, onAnchor, onClose, loading }: { 
   const parseInput = (s: string) => parseInt(s.replace(/\D/g, "")) || 0;
   const dates = txnData.map((t) => t.date);
   const [selectedDate, setSelectedDate] = useState(dates[dates.length - 1] ?? "");
-  const txn = txnData.find((t) => t.date === selectedDate);
 
   const [cashEnabled, setCashEnabled] = useState(true);
   const [qrisEnabled, setQrisEnabled] = useState(false);

@@ -8,7 +8,6 @@ import {
   getDoc,
   setDoc,
   addDoc,
-  increment,
   writeBatch,
   deleteField,
   orderBy,
@@ -388,15 +387,11 @@ export async function rejectDiscrepancy(
   const data = snap.data();
   const totalCash = data.systemSalesCash ?? 0;
   const totalQris = data.systemSalesQris ?? 0;
-  const totalOnline = data.systemSalesOnline ?? 0;
-
   const expensesCash = data.expensesCash ?? 0;
   const expensesQris = data.expensesQris ?? 0;
-  // const expensesOnline = data.expensesOnline ?? 0;
 
   const deltaCash = editedActuals.cash - (totalCash - expensesCash);
   const deltaQris = editedActuals.qris - (totalQris - expensesQris);
-  const deltaOnline = data.discrepancyOnline ?? 0; // Reject logic typically doesn't let user edit online in POS, keep existing
 
   const batch = writeBatch(db);
 

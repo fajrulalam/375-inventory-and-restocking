@@ -8,9 +8,7 @@ import {
   getDocs, 
   doc, 
   writeBatch, 
-  increment,
-  Timestamp,
-  getDoc
+  Timestamp
 } from "firebase/firestore";
 import { firebaseConfig } from "@/config/firebase";
 import { useTestingMode } from "@/contexts/TestingModeContext";
@@ -45,8 +43,8 @@ export default function MigrationPage() {
       let totalProcessed = 0;
 
       // Track totals for Monthly/Yearly aggregates
-      const monthlyAggregates: Record<string, any> = {};
-      const yearlyAggregates: Record<string, any> = {};
+      const monthlyAggregates: Record<string, { cash: number; qris: number; online: number }> = {};
+      const yearlyAggregates: Record<string, { cash: number; qris: number; online: number }> = {};
 
       for (const d of snapshot.docs) {
         const data = d.data();
@@ -79,9 +77,9 @@ export default function MigrationPage() {
         };
 
         // Add anchors if they exist
-        if (data.anchorCash !== undefined) (reportData as any).anchorCash = data.anchorCash;
-        if (data.anchorQris !== undefined) (reportData as any).anchorQris = data.anchorQris;
-        if (data.anchorOnline !== undefined) (reportData as any).anchorOnline = data.anchorOnline;
+        if (data.anchorCash !== undefined) (reportData as Record<string, unknown>).anchorCash = data.anchorCash;
+        if (data.anchorQris !== undefined) (reportData as Record<string, unknown>).anchorQris = data.anchorQris;
+        if (data.anchorOnline !== undefined) (reportData as Record<string, unknown>).anchorOnline = data.anchorOnline;
 
         // Write Daily Report
         const reportRef = doc(db, `${prefix}DailyFinancialReport`, dateId);
@@ -145,9 +143,10 @@ export default function MigrationPage() {
 
       addLog(`Success! Processed ${totalProcessed} documents.`);
       setStatus("success");
-    } catch (err: any) {
-      addLog(`ERROR: ${err.message}`);
-      console.error(err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      addLog(`ERROR: ${error.message}`);
+      console.error(error);
       setStatus("error");
     }
   };

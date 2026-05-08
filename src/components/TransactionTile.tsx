@@ -134,7 +134,7 @@ export default function TransactionTile({
       console.log(`Unsubscribing from ${effectiveCollection}/${documentId}`);
       unsubscribe();
     };
-  }, [collectionName, documentId, isTestingMode]);
+  }, [collectionName, documentId, isTestingMode, isLoading]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint
   const [isHistoricalModalOpen, setIsHistoricalModalOpen] = useState(false);
