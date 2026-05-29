@@ -350,6 +350,14 @@ const ServedOrdersTile = ({
                             </div>
                           </div>
                           <OptionPills options={item.selectedOptions || []} />
+                          {item.customerNote && (
+                            <div className="text-[11px] text-gray-500 italic mt-1 flex items-start gap-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-gray-400">
+                                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                              </svg>
+                              <span className="break-words">{`Note: "${item.customerNote}"`}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -446,29 +454,65 @@ const ServedOrdersTile = ({
                         const quantity = isTakeAway
                           ? item.takeAwayQuantity
                           : item.dineInQuantity;
+
+                        const isCompleted = 
+                          (item.takeAwayQuantity > 0 ? item.takeAwayQuantity === item.takeAwayPreparedQuantity : true) &&
+                          (item.dineInQuantity > 0 ? item.dineInQuantity === item.dineInPreparedQuantity : true) &&
+                          (item.takeAwayQuantity > 0 || item.dineInQuantity > 0);
+
+                        const preparedQuantity = isTakeAway
+                          ? (item.takeAwayPreparedQuantity || 0)
+                          : (item.dineInPreparedQuantity || 0);
+
                         return (
                           <div
                             key={`${order.id}-${index}`}
-                            className={`rounded-md px-2.5 py-1.5 ${
-                              isTakeAway
-                                ? "bg-amber-50/70 border border-amber-100"
-                                : "bg-blue-50/70 border border-blue-100"
+                            className={`rounded-md px-2.5 py-1.5 transition-all duration-150 ${
+                              isCompleted
+                                ? isTakeAway
+                                  ? "bg-amber-50/40 border border-amber-100/40 opacity-60"
+                                  : "bg-blue-50/40 border border-blue-100/40 opacity-60"
+                                : isTakeAway
+                                  ? "bg-amber-50/70 border border-amber-100"
+                                  : "bg-blue-50/70 border border-blue-100"
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium text-gray-900 text-sm">
+                              <span className={`text-sm transition-all duration-150 ${
+                                isCompleted
+                                  ? "line-through text-gray-400 font-normal"
+                                  : "font-medium text-gray-900"
+                              }`}>
                                 {item.namaPesanan}
                               </span>
                               <div className="flex items-center gap-3">
                                 {item.harga > 0 && (
-                                  <span className="text-xs font-semibold text-gray-600">
+                                  <span className={`text-xs font-semibold transition-all duration-150 ${
+                                    isCompleted ? "text-gray-400 line-through font-normal" : "text-gray-600"
+                                  }`}>
                                     {formatCurrency(quantity * item.harga)}
                                   </span>
                                 )}
-                                <QuantityBadge>&times;{quantity}</QuantityBadge>
+                                <span className={`inline-flex items-center justify-center h-5 min-w-[24px] px-1.5 rounded text-xs font-bold tabular-nums transition-all duration-150 ${
+                                  isCompleted ? "text-gray-400 line-through font-normal" : "text-gray-600"
+                                }`}>
+                                  {preparedQuantity}/{quantity}
+                                </span>
                               </div>
                             </div>
                             <OptionPills options={item.selectedOptions || []} />
+                            {item.customerNote && (
+                              <div className={`text-[11px] italic mt-1 flex items-start gap-1 transition-all duration-150 ${
+                                isCompleted 
+                                  ? "text-gray-400/80" 
+                                  : "text-amber-700 bg-amber-50/50 border border-amber-100/40 rounded-md px-1.5 py-0.5"
+                              }`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 mt-0.5 shrink-0">
+                                  <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                                </svg>
+                                <span className="break-words">{`Note: "${item.customerNote}"`}</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

@@ -70,18 +70,33 @@ export default function TransactionTile({
     };
   }, []);
 
+  const isInitialRef = useRef(true);
+
+  // Sync state with props if they change
+  useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+    }
+  }, [initialData]);
+
   useEffect(() => {
     // Get Firestore instance
     const db = getFirestore();
     const effectiveCollection = getCollectionPath(collectionName);
 
     console.log(`Setting up listener for ${effectiveCollection}/${documentId}`);
-    setIsLoading(true);
+    isInitialRef.current = true;
+    if (!data) {
+      setIsLoading(true);
+    }
 
     // Create real-time listener
     const unsubscribe = onSnapshot(
       doc(db, effectiveCollection, documentId),
       (docSnapshot) => {
+        const isInitial = isInitialRef.current;
+        isInitialRef.current = false;
+
         if (docSnapshot.exists()) {
           const newData = docSnapshot.data() as TransactionData;
           console.log(
@@ -91,7 +106,7 @@ export default function TransactionTile({
 
           // Check if this is a real update (not initial load) and if the total has changed
           if (
-            !isLoading &&
+            !isInitial &&
             previousTotalRef.current !== null &&
             newData.total !== previousTotalRef.current
           ) {
@@ -134,7 +149,8 @@ export default function TransactionTile({
       console.log(`Unsubscribing from ${effectiveCollection}/${documentId}`);
       unsubscribe();
     };
-  }, [collectionName, documentId, isTestingMode, isLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionName, documentId, isTestingMode]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint
   const [isHistoricalModalOpen, setIsHistoricalModalOpen] = useState(false);

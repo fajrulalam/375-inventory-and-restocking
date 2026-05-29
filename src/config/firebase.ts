@@ -33,9 +33,16 @@ if (typeof window === 'undefined') {
 } else {
   // Client-side check (development only)
   if (process.env.NODE_ENV === 'development') {
-    const missingVars = requiredEnvVars.filter(
-      varName => !process.env[varName] && !process.env[`NEXT_PUBLIC_${varName}`]
-    );
+    const missingVars: string[] = [];
+    if (!firebaseConfig.apiKey) missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
+    if (!firebaseConfig.authDomain) missingVars.push('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+    if (!firebaseConfig.projectId) missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+    if (!firebaseConfig.storageBucket) missingVars.push('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
+    if (!firebaseConfig.messagingSenderId) missingVars.push('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
+    if (!firebaseConfig.appId) missingVars.push('NEXT_PUBLIC_FIREBASE_APP_ID');
+    if (!firebaseConfig.measurementId) missingVars.push('NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID');
+    if (!firebaseConfig.databaseURL) missingVars.push('NEXT_PUBLIC_FIREBASE_DATABASE_URL');
+
     if (missingVars.length > 0) {
       console.warn('Missing required environment variables:', missingVars.join(', '));
     }

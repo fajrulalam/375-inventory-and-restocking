@@ -44,29 +44,69 @@ interface TransactionData {
   total: number;
 }
 
+interface GlobalCache {
+  dailyData: TransactionData | null;
+  monthlyData: TransactionData | null;
+  yearlyData: TransactionData | null;
+  dailyItemMedians: { [key: string]: number } | null;
+  monthlyItemMedians: { [key: string]: number } | null;
+  yearlyItemMedians: { [key: string]: number } | null;
+  medianData: number | null;
+  dailyHistoricalData: HistoricalDataItem[];
+  monthlyHistoricalData: HistoricalDataItem[];
+  yearlyHistoricalData: HistoricalDataItem[];
+  hourlyData: HourlyDataItem[];
+  servedOrders: ServedOrderData[];
+  pendingOrders: PendingOrderData[];
+}
+
+// Memory cache to prevent page flickering during navigation
+let globalPageCache: GlobalCache | null = null;
+
+const updateGlobalCache = <K extends keyof GlobalCache>(key: K, value: GlobalCache[K]) => {
+  if (!globalPageCache) {
+    globalPageCache = {
+      dailyData: null,
+      monthlyData: null,
+      yearlyData: null,
+      dailyItemMedians: null,
+      monthlyItemMedians: null,
+      yearlyItemMedians: null,
+      medianData: null,
+      dailyHistoricalData: [],
+      monthlyHistoricalData: [],
+      yearlyHistoricalData: [],
+      hourlyData: [],
+      servedOrders: [],
+      pendingOrders: []
+    };
+  }
+  globalPageCache[key] = value;
+};
+
 export default function Home() {
-  const [dailyData, setDailyData] = useState<TransactionData | null>(null);
-  const [monthlyData, setMonthlyData] = useState<TransactionData | null>(null);
-  const [yearlyData, setYearlyData] = useState<TransactionData | null>(null);
+  const [dailyData, setDailyData] = useState<TransactionData | null>(() => globalPageCache?.dailyData ?? null);
+  const [monthlyData, setMonthlyData] = useState<TransactionData | null>(() => globalPageCache?.monthlyData ?? null);
+  const [yearlyData, setYearlyData] = useState<TransactionData | null>(() => globalPageCache?.yearlyData ?? null);
   const [dailyItemMedians, setDailyItemMedians] = useState<{
     [key: string]: number;
-  } | null>(null);
+  } | null>(() => globalPageCache?.dailyItemMedians ?? null);
   const [monthlyItemMedians, setMonthlyItemMedians] = useState<{
     [key: string]: number;
-  } | null>(null);
+  } | null>(() => globalPageCache?.monthlyItemMedians ?? null);
   const [yearlyItemMedians, setYearlyItemMedians] = useState<{
     [key: string]: number;
-  } | null>(null);
-  const [medianData, setMedianData] = useState<number | null>(null);
+  } | null>(() => globalPageCache?.yearlyItemMedians ?? null);
+  const [medianData, setMedianData] = useState<number | null>(() => globalPageCache?.medianData ?? null);
   const [dailyHistoricalData, setDailyHistoricalData] = useState<
     HistoricalDataItem[]
-  >([]);
+  >(() => globalPageCache?.dailyHistoricalData ?? []);
   const [monthlyHistoricalData, setMonthlyHistoricalData] = useState<
     HistoricalDataItem[]
-  >([]);
+  >(() => globalPageCache?.monthlyHistoricalData ?? []);
   const [yearlyHistoricalData, setYearlyHistoricalData] = useState<
     HistoricalDataItem[]
-  >([]);
+  >(() => globalPageCache?.yearlyHistoricalData ?? []);
   const [currentWeekday] = useState<string>(() => {
     const jakartaOptions: Intl.DateTimeFormatOptions = {
       weekday: "long",
@@ -75,18 +115,18 @@ export default function Home() {
     return new Date().toLocaleDateString("en-US", jakartaOptions);
   });
 
-  const [hourlyData, setHourlyData] = useState<HourlyDataItem[]>([]);
-  const [servedOrders, setServedOrders] = useState<ServedOrderData[]>([]);
-  const [pendingOrders, setPendingOrders] = useState<PendingOrderData[]>([]);
+  const [hourlyData, setHourlyData] = useState<HourlyDataItem[]>(() => globalPageCache?.hourlyData ?? []);
+  const [servedOrders, setServedOrders] = useState<ServedOrderData[]>(() => globalPageCache?.servedOrders ?? []);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrderData[]>(() => globalPageCache?.pendingOrders ?? []);
 
   // Separate loading states for different queries
-  const [isLoadingMainData, setIsLoadingMainData] = useState(true);
-  const [isLoadingMedianData, setIsLoadingMedianData] = useState(true);
-  const [isLoadingMonthlyHistory, setIsLoadingMonthlyHistory] = useState(true);
-  const [isLoadingYearlyHistory, setIsLoadingYearlyHistory] = useState(true);
-  const [isLoadingHourlyData, setIsLoadingHourlyData] = useState(true);
-  const [isLoadingServedOrders, setIsLoadingServedOrders] = useState(true);
-  const [isLoadingPendingOrders, setIsLoadingPendingOrders] = useState(true);
+  const [isLoadingMainData, setIsLoadingMainData] = useState(() => !globalPageCache?.dailyData);
+  const [isLoadingMedianData, setIsLoadingMedianData] = useState(() => globalPageCache?.medianData === undefined || globalPageCache?.medianData === null ? true : !globalPageCache?.dailyHistoricalData?.length);
+  const [isLoadingMonthlyHistory, setIsLoadingMonthlyHistory] = useState(() => !globalPageCache?.monthlyHistoricalData?.length);
+  const [isLoadingYearlyHistory, setIsLoadingYearlyHistory] = useState(() => !globalPageCache?.yearlyHistoricalData?.length);
+  const [isLoadingHourlyData, setIsLoadingHourlyData] = useState(() => !globalPageCache?.hourlyData?.length);
+  const [isLoadingServedOrders, setIsLoadingServedOrders] = useState(() => !globalPageCache?.servedOrders?.length);
+  const [isLoadingPendingOrders, setIsLoadingPendingOrders] = useState(() => !globalPageCache?.pendingOrders?.length);
 
   const { isTestingMode, toggleTestingMode } = useTestingMode();
 
@@ -100,6 +140,64 @@ export default function Home() {
     setHideNumbers((prev) => !prev);
   };
 
+  // Synchronize state updates to global page cache to prevent page flickering on mount
+  useEffect(() => {
+    if (dailyData) updateGlobalCache("dailyData", dailyData);
+  }, [dailyData]);
+
+  useEffect(() => {
+    if (monthlyData) updateGlobalCache("monthlyData", monthlyData);
+  }, [monthlyData]);
+
+  useEffect(() => {
+    if (yearlyData) updateGlobalCache("yearlyData", yearlyData);
+  }, [yearlyData]);
+
+  useEffect(() => {
+    if (dailyItemMedians) updateGlobalCache("dailyItemMedians", dailyItemMedians);
+  }, [dailyItemMedians]);
+
+  useEffect(() => {
+    if (monthlyItemMedians) updateGlobalCache("monthlyItemMedians", monthlyItemMedians);
+  }, [monthlyItemMedians]);
+
+  useEffect(() => {
+    if (yearlyItemMedians) updateGlobalCache("yearlyItemMedians", yearlyItemMedians);
+  }, [yearlyItemMedians]);
+
+  useEffect(() => {
+    if (medianData !== null) updateGlobalCache("medianData", medianData);
+  }, [medianData]);
+
+  useEffect(() => {
+    if (dailyHistoricalData.length > 0) updateGlobalCache("dailyHistoricalData", dailyHistoricalData);
+  }, [dailyHistoricalData]);
+
+  useEffect(() => {
+    if (monthlyHistoricalData.length > 0) updateGlobalCache("monthlyHistoricalData", monthlyHistoricalData);
+  }, [monthlyHistoricalData]);
+
+  useEffect(() => {
+    if (yearlyHistoricalData.length > 0) updateGlobalCache("yearlyHistoricalData", yearlyHistoricalData);
+  }, [yearlyHistoricalData]);
+
+  useEffect(() => {
+    if (hourlyData.length > 0) updateGlobalCache("hourlyData", hourlyData);
+  }, [hourlyData]);
+
+  useEffect(() => {
+    if (servedOrders.length > 0) updateGlobalCache("servedOrders", servedOrders);
+  }, [servedOrders]);
+
+  useEffect(() => {
+    if (pendingOrders.length > 0) updateGlobalCache("pendingOrders", pendingOrders);
+  }, [pendingOrders]);
+
+  // Clear memory cache when testing mode changes
+  useEffect(() => {
+    globalPageCache = null;
+  }, [isTestingMode]);
+
   // Create a today date variable at the component level to use across the component
   const today = useMemo(() => new Date(), []);
 
@@ -109,10 +207,14 @@ export default function Home() {
     // Set up real-time updates for hourly data, served orders, and pending orders
 
     // Set up real-time updates for hourly data, served orders, and pending orders
+    const hasCachedData = !!globalPageCache;
+
     const setupDataUpdates = () => {
-      setIsLoadingHourlyData(true);
-      setIsLoadingServedOrders(true);
-      setIsLoadingPendingOrders(true);
+      if (!hasCachedData) {
+        setIsLoadingHourlyData(true);
+        setIsLoadingServedOrders(true);
+        setIsLoadingPendingOrders(true);
+      }
 
       try {
         // Initial data fetch
@@ -162,10 +264,12 @@ export default function Home() {
     };
 
     const fetchMainTransactions = async () => {
-      setIsLoadingMainData(true);
-      setDailyItemMedians(null);
-      setMonthlyItemMedians(null);
-      setYearlyItemMedians(null);
+      if (!hasCachedData) {
+        setIsLoadingMainData(true);
+        setDailyItemMedians(null);
+        setMonthlyItemMedians(null);
+        setYearlyItemMedians(null);
+      }
 
       try {
         const todayFormatted = getFormattedDate(today);
@@ -263,7 +367,7 @@ export default function Home() {
     };
 
     const fetchDailyHistoricalData = async () => {
-      setIsLoadingMedianData(true);
+      if (!hasCachedData) setIsLoadingMedianData(true);
       try {
         // Check if we have cached data first
         const cachePrefix = isTestingMode ? "test_" : "";
@@ -352,7 +456,7 @@ export default function Home() {
     };
 
     const fetchMonthlyHistoricalDataFromFirestore = async () => {
-      setIsLoadingMonthlyHistory(true);
+      if (!hasCachedData) setIsLoadingMonthlyHistory(true);
       try {
         // Check cache first
         const monthlyCacheKey = `${isTestingMode ? "test_" : ""}monthly-historical-data`;
@@ -378,7 +482,7 @@ export default function Home() {
     };
 
     const fetchYearlyHistoricalDataFromFirestore = async () => {
-      setIsLoadingYearlyHistory(true);
+      if (!hasCachedData) setIsLoadingYearlyHistory(true);
       try {
         // Check cache first
         const yearlyCacheKey = `${isTestingMode ? "test_" : ""}yearly-historical-data`;

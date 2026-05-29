@@ -55,6 +55,7 @@ export interface OrderItemData {
   preparedQuantity: number;
   orderType: string;
   harga: number;
+  customerNote?: string;
   selectedOptions?: SelectedOption[];
 }
 
@@ -91,6 +92,9 @@ export interface PendingOrderItemData {
   namaPesanan: string;
   dineInQuantity: number;
   takeAwayQuantity: number;
+  dineInPreparedQuantity?: number;
+  takeAwayPreparedQuantity?: number;
+  customerNote?: string;
   orderType?: string; // Calculated field
   harga: number;
   selectedOptions?: SelectedOption[];
@@ -242,19 +246,49 @@ const processPendingOrdersData = (
       if (hour >= 8 && hour < 17) {
         const hourKey = `${hour}:00-${hour + 1}:00`;
 
-        // Aggregate items
-        if (Array.isArray(data.orderItems)) {
+        // Aggregate items and revenue
+        let hasProcessedItemsRevenue = false;
+        if (Array.isArray(data.orderItems) && data.orderItems.length > 0) {
           data.orderItems.forEach((item) => {
-            const totalQuantity =
-              (item.quantity || 0) + (item.dineInQuantity || 0) + (item.takeAwayQuantity || 0);
-            if (totalQuantity > 0) {
-              hourlyAggregates[hourKey].pendingItems += totalQuantity;
+            const isTakeAway = (item.takeAwayQuantity || 0) > 0 || item.orderType === "take-away";
+            const dineInQty = item.dineInQuantity || (!isTakeAway ? (item.quantity || 0) : 0);
+            const takeAwayQty = item.takeAwayQuantity || (isTakeAway ? (item.quantity || 0) : 0);
+            const dineInPrep = item.dineInPreparedQuantity !== undefined 
+              ? item.dineInPreparedQuantity 
+              : (!isTakeAway ? (item.preparedQuantity || 0) : 0);
+            const takeAwayPrep = item.takeAwayPreparedQuantity !== undefined 
+              ? item.takeAwayPreparedQuantity 
+              : (isTakeAway ? (item.preparedQuantity || 0) : 0);
+
+            const isCompleted = 
+              (takeAwayQty > 0 ? takeAwayQty === takeAwayPrep : true) &&
+              (dineInQty > 0 ? dineInQty === dineInPrep : true) &&
+              (takeAwayQty > 0 || dineInQty > 0);
+
+            const itemQuantity = takeAwayQty + dineInQty;
+            if (itemQuantity > 0) {
+              if (isCompleted) {
+                hourlyAggregates[hourKey].items += itemQuantity;
+              } else {
+                hourlyAggregates[hourKey].pendingItems += itemQuantity;
+              }
+            }
+
+            const itemPrice = item.harga || 0;
+            const servedQty = dineInPrep + takeAwayPrep;
+            const pendingQty = Math.max(0, itemQuantity - servedQty);
+
+            if (servedQty > 0) {
+              hourlyAggregates[hourKey].revenue += servedQty * itemPrice;
+            }
+            if (pendingQty > 0) {
+              hourlyAggregates[hourKey].pendingRevenue += pendingQty * itemPrice;
             }
           });
+          hasProcessedItemsRevenue = true;
         }
         
-        // Aggregate revenue from pending orders
-        if (typeof data.total === "number") {
+        if (!hasProcessedItemsRevenue && typeof data.total === "number") {
           hourlyAggregates[hourKey].pendingRevenue += data.total;
         }
       }
@@ -383,6 +417,7 @@ const processServedOrdersForUI = (
           preparedQuantity: (item.preparedQuantity || 0) + (item.dineInPreparedQuantity || 0) + (item.takeAwayPreparedQuantity || 0),
           orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
           harga: item.harga || 0,
+          customerNote: item.customerNote || "",
           selectedOptions: Array.isArray(item.selectedOptions)
             ? item.selectedOptions.map((opt: Record<string, unknown>) => ({
                 groupId: (opt.groupId as string) || "",
@@ -429,6 +464,13 @@ const processPendingOrdersForUI = (
           namaPesanan: item.namaPesanan || "",
           dineInQuantity: (item.dineInQuantity || 0) + (!item.orderType || item.orderType === "dine-in" ? (item.quantity || 0) : 0),
           takeAwayQuantity: (item.takeAwayQuantity || 0) + (item.orderType === "take-away" ? (item.quantity || 0) : 0),
+          dineInPreparedQuantity: item.dineInPreparedQuantity !== undefined 
+            ? item.dineInPreparedQuantity 
+            : (!item.orderType || item.orderType === "dine-in" ? (item.preparedQuantity || 0) : 0),
+          takeAwayPreparedQuantity: item.takeAwayPreparedQuantity !== undefined 
+            ? item.takeAwayPreparedQuantity 
+            : (item.orderType === "take-away" ? (item.preparedQuantity || 0) : 0),
+          customerNote: item.customerNote || "",
           orderType: item.orderType || ((item.takeAwayQuantity || 0) > 0 ? "take-away" : "dine-in"),
           harga: item.harga || 0,
           selectedOptions: Array.isArray(item.selectedOptions)
