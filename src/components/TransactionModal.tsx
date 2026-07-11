@@ -25,7 +25,7 @@ interface TransactionModalProps {
   tile: DailyTileData | null;
 }
 
-type PaymentFilter = "All" | "Cash" | "QRIS" | "Online";
+type PaymentFilter = "All" | "Cash" | "QRIS" | "Online" | "Program";
 
 /* ── Shared sub-components (matching ServedOrdersTile design) ── */
 
@@ -199,6 +199,16 @@ const OrderCard = ({ order }: { order: ServedOrderData }) => {
             name={order.namaCustomer}
             isMember={order.isMember}
           />
+          {order.paymentMethod === "Program" && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200 uppercase tracking-wider shrink-0">
+              Voucher Program
+            </span>
+          )}
+          {order.paymentMethod && order.paymentMethod !== "Program" && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-wider shrink-0">
+              {order.paymentMethod}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Tooltip
@@ -424,6 +434,7 @@ export default function TransactionModal({
     Cash: baseOrders.filter((o) => o.paymentMethod === "Cash").length,
     QRIS: baseOrders.filter((o) => o.paymentMethod === "QRIS").length,
     Online: baseOrders.filter((o) => o.paymentMethod === "Online").length,
+    Program: baseOrders.filter((o) => o.paymentMethod === "Program").length,
   };
   const memberCount = orders.filter((o) => o.isMember).length;
 
@@ -597,7 +608,7 @@ export default function TransactionModal({
             <>
               {/* Filters */}
               <div className="flex gap-2 mb-4 flex-wrap items-center">
-                {(["All", "Cash", "QRIS", "Online"] as PaymentFilter[]).map(
+                {(["All", "Cash", "QRIS", "Online", "Program"] as PaymentFilter[]).map(
                   (method) => (
                     <button
                       key={method}

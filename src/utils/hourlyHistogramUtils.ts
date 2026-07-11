@@ -85,6 +85,8 @@ export interface PendingOrderData {
   total: number;
   waktuPengambilan: string;
   bungkus?: number; // Optional field for take-away orders
+  transactionMethod?: string;
+  isClosed?: boolean;
 }
 
 // Interface for pending order item data
@@ -213,10 +215,12 @@ const processPendingOrdersData = (
   querySnapshot.forEach((doc) => {
     const data = doc.data();
 
-    // Only process orders that are not completed or cancelled
+    // Only process orders that are not completed, cancelled, settled, or closed open bills
     if (
       data.status !== "completed" &&
       data.status !== "cancelled" &&
+      data.status !== "Settled" &&
+      data.isClosed !== true &&
       data.waktuPesan
     ) {
       // Convert Firestore timestamp to JS Date
@@ -485,6 +489,16 @@ const processPendingOrdersForUI = (
         }))
       : [];
 
+    // Exclude completed, cancelled, settled, or closed open bills
+    if (
+      data.status === "completed" ||
+      data.status === "cancelled" ||
+      data.status === "Settled" ||
+      data.isClosed === true
+    ) {
+      return;
+    }
+
     pendingOrders.push({
       id: doc.id,
       customerNumber: data.customerNumber || "",
@@ -496,6 +510,8 @@ const processPendingOrdersForUI = (
       total: data.total || 0,
       waktuPengambilan: data.waktuPengambilan || "",
       bungkus: data.bungkus || 0,
+      transactionMethod: data.transactionMethod || "",
+      isClosed: data.isClosed === true,
     });
   });
 

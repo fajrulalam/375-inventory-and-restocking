@@ -296,6 +296,16 @@ const ServedOrdersTile = ({
                         name={order.namaCustomer}
                         isMember={order.isMember}
                       />
+                      {order.paymentMethod === "Program" && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200 uppercase tracking-wider shrink-0">
+                          Voucher Program
+                        </span>
+                      )}
+                      {order.paymentMethod && order.paymentMethod !== "Program" && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-wider shrink-0">
+                          {order.paymentMethod}
+                        </span>
+                      )}
                     </div>
                     <Tooltip
                       text={`Served at ${order.timestampServe
@@ -428,6 +438,11 @@ const ServedOrdersTile = ({
                           name={order.namaCustomer}
                           isMember={order.isMember}
                         />
+                        {order.transactionMethod === "Open Bill" && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-orange-100 text-orange-800 border border-orange-200 uppercase tracking-wider shrink-0">
+                            Open Bill
+                          </span>
+                        )}
                       </div>
                       <div
                         className={`flex items-center gap-1 text-[11px] shrink-0 font-semibold tabular-nums ${
@@ -449,72 +464,92 @@ const ServedOrdersTile = ({
 
                     {/* Items */}
                     <div className="px-2.5 py-2 space-y-1">
-                      {order.orderItems.map((item, index) => {
-                        const isTakeAway = item.takeAwayQuantity > 0;
-                        const quantity = isTakeAway
-                          ? item.takeAwayQuantity
-                          : item.dineInQuantity;
-
-                        const isCompleted = 
-                          (item.takeAwayQuantity > 0 ? item.takeAwayQuantity === item.takeAwayPreparedQuantity : true) &&
-                          (item.dineInQuantity > 0 ? item.dineInQuantity === item.dineInPreparedQuantity : true) &&
-                          (item.takeAwayQuantity > 0 || item.dineInQuantity > 0);
-
-                        const preparedQuantity = isTakeAway
-                          ? (item.takeAwayPreparedQuantity || 0)
-                          : (item.dineInPreparedQuantity || 0);
-
-                        return (
-                          <div
-                            key={`${order.id}-${index}`}
-                            className={`rounded-md px-2.5 py-1.5 transition-all duration-150 ${
-                              isCompleted
-                                ? isTakeAway
-                                  ? "bg-amber-50/40 border border-amber-100/40 opacity-60"
-                                  : "bg-blue-50/40 border border-blue-100/40 opacity-60"
-                                : isTakeAway
-                                  ? "bg-amber-50/70 border border-amber-100"
-                                  : "bg-blue-50/70 border border-blue-100"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`text-sm transition-all duration-150 ${
+                      {order.orderItems.flatMap((item, itemIdx) => {
+                        const itemsToRender = [];
+                        if (item.dineInQuantity > 0) {
+                          itemsToRender.push({
+                            ...item,
+                            isTakeAway: false,
+                            quantity: item.dineInQuantity,
+                            preparedQuantity: item.dineInPreparedQuantity || 0,
+                            isCompleted: item.dineInQuantity === (item.dineInPreparedQuantity || 0),
+                            suffix: item.takeAwayQuantity > 0 ? " (Dine In)" : "",
+                          });
+                        }
+                        if (item.takeAwayQuantity > 0) {
+                          itemsToRender.push({
+                            ...item,
+                            isTakeAway: true,
+                            quantity: item.takeAwayQuantity,
+                            preparedQuantity: item.takeAwayPreparedQuantity || 0,
+                            isCompleted: item.takeAwayQuantity === (item.takeAwayPreparedQuantity || 0),
+                            suffix: item.dineInQuantity > 0 ? " (Take Away)" : "",
+                          });
+                        }
+                        if (itemsToRender.length === 0) {
+                          itemsToRender.push({
+                            ...item,
+                            isTakeAway: false,
+                            quantity: 0,
+                            preparedQuantity: 0,
+                            isCompleted: true,
+                            suffix: "",
+                          });
+                        }
+                        return itemsToRender.map((renderItem, subIdx) => {
+                          const { isTakeAway, quantity, preparedQuantity, isCompleted, suffix } = renderItem;
+                          return (
+                            <div
+                              key={`${order.id}-${itemIdx}-${subIdx}`}
+                              className={`rounded-md px-2.5 py-1.5 transition-all duration-150 ${
                                 isCompleted
-                                  ? "line-through text-gray-400 font-normal"
-                                  : "font-medium text-gray-900"
-                              }`}>
-                                {item.namaPesanan}
-                              </span>
-                              <div className="flex items-center gap-3">
-                                {item.harga > 0 && (
-                                  <span className={`text-xs font-semibold transition-all duration-150 ${
+                                  ? isTakeAway
+                                    ? "bg-amber-50/40 border border-amber-100/40 opacity-60"
+                                    : "bg-blue-50/40 border border-blue-100/40 opacity-60"
+                                  : isTakeAway
+                                    ? "bg-amber-50/70 border border-amber-100"
+                                    : "bg-blue-50/70 border border-blue-100"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-sm transition-all duration-150 ${
+                                  isCompleted
+                                    ? "line-through text-gray-400 font-normal"
+                                    : "font-medium text-gray-900"
+                                }`}>
+                                  {renderItem.namaPesanan}{suffix}
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  {renderItem.harga > 0 && (
+                                    <span className={`text-xs font-semibold transition-all duration-150 ${
+                                      isCompleted ? "text-gray-400 line-through font-normal" : "text-gray-600"
+                                    }`}>
+                                      {formatCurrency(quantity * renderItem.harga)}
+                                    </span>
+                                  )}
+                                  <span className={`inline-flex items-center justify-center h-5 min-w-[24px] px-1.5 rounded text-xs font-bold tabular-nums transition-all duration-150 ${
                                     isCompleted ? "text-gray-400 line-through font-normal" : "text-gray-600"
                                   }`}>
-                                    {formatCurrency(quantity * item.harga)}
+                                    {preparedQuantity}/{quantity}
                                   </span>
-                                )}
-                                <span className={`inline-flex items-center justify-center h-5 min-w-[24px] px-1.5 rounded text-xs font-bold tabular-nums transition-all duration-150 ${
-                                  isCompleted ? "text-gray-400 line-through font-normal" : "text-gray-600"
+                                </div>
+                              </div>
+                              <OptionPills options={renderItem.selectedOptions || []} />
+                              {renderItem.customerNote && (
+                                <div className={`text-[11px] italic mt-1 flex items-start gap-1 transition-all duration-150 ${
+                                  isCompleted 
+                                    ? "text-gray-400/80" 
+                                    : "text-amber-700 bg-amber-50/50 border border-amber-100/40 rounded-md px-1.5 py-0.5"
                                 }`}>
-                                  {preparedQuantity}/{quantity}
-                                </span>
-                              </div>
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 mt-0.5 shrink-0">
+                                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                                  </svg>
+                                  <span className="break-words">{`Note: "${renderItem.customerNote}"`}</span>
+                                </div>
+                              )}
                             </div>
-                            <OptionPills options={item.selectedOptions || []} />
-                            {item.customerNote && (
-                              <div className={`text-[11px] italic mt-1 flex items-start gap-1 transition-all duration-150 ${
-                                isCompleted 
-                                  ? "text-gray-400/80" 
-                                  : "text-amber-700 bg-amber-50/50 border border-amber-100/40 rounded-md px-1.5 py-0.5"
-                              }`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 mt-0.5 shrink-0">
-                                  <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                                </svg>
-                                <span className="break-words">{`Note: "${item.customerNote}"`}</span>
-                              </div>
-                            )}
-                          </div>
-                        );
+                          );
+                        });
                       })}
                     </div>
 
