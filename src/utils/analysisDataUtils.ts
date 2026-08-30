@@ -18,10 +18,13 @@ export interface DailyTransactionData {
   [key: string]: number | string | boolean | null | Record<string, unknown> | undefined;
 }
 
+export type ItemCategory = 'food' | 'beverage';
+export type MenuCategoryMap = Record<string, ItemCategory>;
+
 export interface TransactionItem {
   name: string;
   quantity: number;
-  category: 'food' | 'beverage';
+  category: ItemCategory;
 }
 
 export interface DailyTileData {
@@ -81,14 +84,115 @@ export const formatDisplayDate = (date: Date): string => {
   return `${day}/${month}/${year}`;
 };
 
-// Categorize items based on name patterns
-export const categorizeItem = (itemName: string): 'food' | 'beverage' => {
-  const lowerName = itemName.toLowerCase();
-  if (lowerName.startsWith('es ') || lowerName.startsWith('kopi') || lowerName.startsWith('air')) {
-    return 'beverage';
+const normalizeItemName = (itemName: string): string =>
+  itemName.trim().replace(/\s+/g, ' ').toLowerCase();
+
+// MenuCollection is the source of truth for whether a menu item is food or a
+// beverage. Keep both the menu name and document ID so older transactions that
+// stored either value can still be categorized.
+export const fetchMenuCategories = async (
+  db: Firestore,
+): Promise<MenuCategoryMap> => {
+  try {
+    const menuCollection = collection(
+      db,
+      getCollectionPath('Canteens/canteen375/MenuCollection'),
+    );
+    const querySnapshot = await getDocs(menuCollection);
+    const menuCategories: MenuCategoryMap = {};
+
+    querySnapshot.forEach((menuDocument) => {
+      const data = menuDocument.data();
+      if (typeof data.isMakanan !== 'boolean') return;
+
+      const category: ItemCategory = data.isMakanan ? 'food' : 'beverage';
+      const names = [menuDocument.id];
+      if (typeof data.namaMenu === 'string' && data.namaMenu.trim()) {
+        names.push(data.namaMenu);
+      }
+
+      names.forEach((name) => {
+        const normalizedName = normalizeItemName(name);
+        if (normalizedName) {
+          menuCategories[normalizedName] = category;
+        }
+      });
+    });
+
+    return menuCategories;
+  } catch (error) {
+    console.error('Error fetching menu categories:', error);
+    return {};
   }
-  return 'food';
 };
+
+// Categorize an item using the isMakanan value loaded from MenuCollection.
+// Menu items are expected to have a corresponding MenuCollection document;
+// food is the safe fallback for legacy records without a menu match.
+export const categorizeItem = (
+  itemName: string,
+  menuCategories: MenuCategoryMap = {},
+): ItemCategory => menuCategories[normalizeItemName(itemName)] ?? 'food';
+
+// Numeric fields on DailyTransaction that describe the transaction itself,
+// rather than menu items. These must not be rendered in the item breakdown.
+const nonItemTransactionFields = new Set([
+  'year',
+  'date',
+  'month',
+  'timestamp',
+  'customerNumber',
+  'total',
+  'voucher',
+  'day',
+  'items',
+  'takeAwayFee',
+  'subTotal',
+  'totalCash',
+  'totalQris',
+  'totalOnline',
+  'totalVoucher',
+  'totalVoucherSettled',
+  'totalB2BRedeemed',
+  'totalB2BSettled',
+  // Keep compatibility with the casing used by some older records.
+  'totalB2bRedeemed',
+  'totalB2bSettled',
+  'lastB2BSettlementAt',
+  'actualCash',
+  'actualQris',
+  'actualOnline',
+  'discrepancyCash',
+  'discrepancyQris',
+  'discrepancyOnline',
+  'closingCash',
+  'closingQris',
+  'closingOnline',
+  'grossCash',
+  'grossQris',
+  'grossOnline',
+  'expensesCash',
+  'expensesQris',
+  'expensesOnline',
+  'isDiscrepancyConfirmed',
+  'preConfirmTotal',
+  'preConfirmSubTotal',
+  'confirmedDeltaCash',
+  'confirmedDeltaQris',
+  'confirmedDeltaOnline',
+  'originalActualCash',
+  'originalActualQris',
+  'originalActualOnline',
+  'originalDiscrepancyCash',
+  'originalDiscrepancyQris',
+  'originalDiscrepancyOnline',
+  'preAnchorClosingCash',
+  'preAnchorClosingQris',
+  'preAnchorClosingOnline',
+  'anchorCash',
+  'anchorQris',
+  'anchorOnline',
+]);
 
 // Fetch transactions for a date range
 export const fetchTransactionsByDateRange = async (
@@ -155,26 +259,13 @@ export const fetchTransactionsByDateRange = async (
 };
 
 // Transform raw transaction data to tile format
-export const transformToTileData = (transactions: DailyTransactionData[]): DailyTileData[] => {
+export const transformToTileData = (
+  transactions: DailyTransactionData[],
+  menuCategories: MenuCategoryMap = {},
+): DailyTileData[] => {
   return transactions.map(transaction => {
     const date = new Date(transaction.date);
     const items: TransactionItem[] = [];
-    
-    // Define excluded keys (same as in TransactionTile.tsx)
-    const excludedKeys = [
-      "year", "date", "month", "timestamp", 
-      "customerNumber", "total", "voucher", "day",
-      "isDiscrepancyConfirmed", "preConfirmTotal", "preConfirmSubTotal",
-      "confirmedDeltaCash", "confirmedDeltaQris", "confirmedDeltaOnline",
-      "originalActualCash", "originalActualQris", "originalActualOnline",
-      "originalDiscrepancyCash", "originalDiscrepancyQris", "originalDiscrepancyOnline",
-      "preAnchorClosingCash", "preAnchorClosingQris", "preAnchorClosingOnline",
-      "anchorCash", "anchorQris", "anchorOnline", "subTotal", "totalCash", 
-      "totalQris", "totalOnline", "actualCash", "actualQris", "actualOnline",
-      "discrepancyCash", "discrepancyQris", "discrepancyOnline", "closingCash", 
-      "closingQris", "closingOnline", "grossCash", "grossQris", "grossOnline", 
-      "expensesCash", "expensesQris", "expensesOnline"
-    ];
     
     // Process items - check both nested items field and direct fields
     const itemsData = transaction.items || {};
@@ -186,18 +277,18 @@ export const transformToTileData = (transactions: DailyTransactionData[]): Daily
           items.push({
             name,
             quantity,
-            category: categorizeItem(name)
+            category: categorizeItem(name, menuCategories)
           });
         }
       });
     } else {
       // Fallback: treat the entire transaction object as items (like TransactionTile does)
       Object.entries(transaction).forEach(([key, value]) => {
-        if (!excludedKeys.includes(key) && typeof value === 'number' && value > 0) {
+        if (!nonItemTransactionFields.has(key) && typeof value === 'number' && value > 0) {
           items.push({
             name: key,
             quantity: value,
-            category: categorizeItem(key)
+            category: categorizeItem(key, menuCategories)
           });
         }
       });
@@ -254,21 +345,6 @@ export const calculateWeeklyMedians = (transactions: DailyTransactionData[]): We
 
 // Extract unique item keys from transactions (excluding system fields)
 export const extractUniqueItems = (transactions: DailyTransactionData[]): string[] => {
-  const excludedKeys = [
-    "year", "date", "month", "timestamp", 
-    "customerNumber", "total", "voucher", "day",
-    "isDiscrepancyConfirmed", "preConfirmTotal", "preConfirmSubTotal",
-    "confirmedDeltaCash", "confirmedDeltaQris", "confirmedDeltaOnline",
-    "originalActualCash", "originalActualQris", "originalActualOnline",
-    "originalDiscrepancyCash", "originalDiscrepancyQris", "originalDiscrepancyOnline",
-    "preAnchorClosingCash", "preAnchorClosingQris", "preAnchorClosingOnline",
-    "anchorCash", "anchorQris", "anchorOnline", "subTotal", "totalCash", 
-    "totalQris", "totalOnline", "actualCash", "actualQris", "actualOnline",
-    "discrepancyCash", "discrepancyQris", "discrepancyOnline", "closingCash", 
-    "closingQris", "closingOnline", "grossCash", "grossQris", "grossOnline", 
-    "expensesCash", "expensesQris", "expensesOnline"
-  ];
-  
   const uniqueItems = new Set<string>();
   
   transactions.forEach(transaction => {
@@ -283,7 +359,7 @@ export const extractUniqueItems = (transactions: DailyTransactionData[]): string
     
     // Check direct properties on transaction object
     Object.entries(transaction).forEach(([key, value]) => {
-      if (!excludedKeys.includes(key) && typeof value === 'number' && value > 0 && key !== 'items') {
+      if (!nonItemTransactionFields.has(key) && typeof value === 'number' && value > 0) {
         uniqueItems.add(key);
       }
     });
@@ -343,16 +419,14 @@ export const calculateWeeklyMediansWithFilter = (transactions: DailyTransactionD
 };
 
 // Transform to tile data with optional item filter
-export const transformToTileDataWithFilter = (transactions: DailyTransactionData[], selectedItem?: string): DailyTileData[] => {
+export const transformToTileDataWithFilter = (
+  transactions: DailyTransactionData[],
+  selectedItem?: string,
+  menuCategories: MenuCategoryMap = {},
+): DailyTileData[] => {
   return transactions.map(transaction => {
     const date = new Date(transaction.date);
     const items: TransactionItem[] = [];
-    
-    // Define excluded keys (same as in TransactionTile.tsx)
-    const excludedKeys = [
-      "year", "date", "month", "timestamp", 
-      "customerNumber", "total", "voucher", "day"
-    ];
     
     // Process items - check both nested items field and direct fields
     const itemsData = transaction.items || {};
@@ -364,18 +438,18 @@ export const transformToTileDataWithFilter = (transactions: DailyTransactionData
           items.push({
             name,
             quantity,
-            category: categorizeItem(name)
+            category: categorizeItem(name, menuCategories)
           });
         }
       });
     } else {
       // Fallback: treat the entire transaction object as items (like TransactionTile does)
       Object.entries(transaction).forEach(([key, value]) => {
-        if (!excludedKeys.includes(key) && typeof value === 'number' && value > 0) {
+        if (!nonItemTransactionFields.has(key) && typeof value === 'number' && value > 0) {
           items.push({
             name: key,
             quantity: value,
-            category: categorizeItem(key)
+            category: categorizeItem(key, menuCategories)
           });
         }
       });
@@ -426,12 +500,16 @@ export const fetchAnalysisData = async (
   weeklyMedians: WeeklyMedianData[];
   dateRange: DateRange;
   availableItems: string[];
+  menuCategories: MenuCategoryMap;
   rawTransactions: DailyTransactionData[];
 }> => {
   try {
     const dateRange = getDateRange(days);
-    const transactions = await fetchTransactionsByDateRange(db, dateRange);
-    const dailyTiles = transformToTileData(transactions);
+    const [transactions, menuCategories] = await Promise.all([
+      fetchTransactionsByDateRange(db, dateRange),
+      fetchMenuCategories(db),
+    ]);
+    const dailyTiles = transformToTileData(transactions, menuCategories);
     const weeklyMedians = calculateWeeklyMedians(transactions);
     const availableItems = extractUniqueItems(transactions);
     
@@ -440,6 +518,7 @@ export const fetchAnalysisData = async (
       weeklyMedians,
       dateRange,
       availableItems,
+      menuCategories,
       rawTransactions: transactions
     };
   } catch (error) {
@@ -449,6 +528,7 @@ export const fetchAnalysisData = async (
       weeklyMedians: [],
       dateRange: getDateRange(days),
       availableItems: [],
+      menuCategories: {},
       rawTransactions: []
     };
   }
@@ -464,11 +544,19 @@ export const fetchAnalysisDataWithFilter = async (
   weeklyMedians: WeeklyMedianData[];
   dateRange: DateRange;
   availableItems: string[];
+  menuCategories: MenuCategoryMap;
 }> => {
   try {
     const dateRange = getDateRange(days);
-    const transactions = await fetchTransactionsByDateRange(db, dateRange);
-    const dailyTiles = transformToTileDataWithFilter(transactions, selectedItem);
+    const [transactions, menuCategories] = await Promise.all([
+      fetchTransactionsByDateRange(db, dateRange),
+      fetchMenuCategories(db),
+    ]);
+    const dailyTiles = transformToTileDataWithFilter(
+      transactions,
+      selectedItem,
+      menuCategories,
+    );
     const weeklyMedians = calculateWeeklyMediansWithFilter(transactions, selectedItem);
     const availableItems = extractUniqueItems(transactions);
     
@@ -476,7 +564,8 @@ export const fetchAnalysisDataWithFilter = async (
       dailyTiles,
       weeklyMedians,
       dateRange,
-      availableItems
+      availableItems,
+      menuCategories,
     };
   } catch (error) {
     console.error("Error fetching analysis data:", error);
@@ -484,7 +573,8 @@ export const fetchAnalysisDataWithFilter = async (
       dailyTiles: [],
       weeklyMedians: [],
       dateRange: getDateRange(days),
-      availableItems: []
+      availableItems: [],
+      menuCategories: {},
     };
   }
 };

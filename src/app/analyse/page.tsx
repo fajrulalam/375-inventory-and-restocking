@@ -21,7 +21,8 @@ import {
   DailyTileData,
   WeeklyMedianData,
   DateRange,
-  DailyTransactionData
+  DailyTransactionData,
+  MenuCategoryMap,
 } from "@/utils/analysisDataUtils";
 import { useTestingMode } from "@/contexts/TestingModeContext";
 
@@ -46,6 +47,7 @@ export default function AnalyseHistoricalData() {
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isFilterDisabled, setIsFilterDisabled] = useState(false);
   const [rawTransactions, setRawTransactions] = useState<DailyTransactionData[]>([]);
+  const [menuCategories, setMenuCategories] = useState<MenuCategoryMap>({});
 
   const loadData = async (days: number) => {
     setIsLoading(true);
@@ -54,9 +56,10 @@ export default function AnalyseHistoricalData() {
       setRawTransactions(result.rawTransactions || []);
       setDateRange(result.dateRange);
       setAvailableItems(result.availableItems);
+      setMenuCategories(result.menuCategories || {});
       
       // Apply current filter
-      applyFilter(result.rawTransactions || []);
+      applyFilter(result.rawTransactions || [], result.menuCategories || {});
     } catch (error) {
       console.error("Error loading analysis data:", error);
     } finally {
@@ -64,17 +67,20 @@ export default function AnalyseHistoricalData() {
     }
   };
 
-  const applyFilter = useCallback((transactions: DailyTransactionData[]) => {
+  const applyFilter = useCallback((
+    transactions: DailyTransactionData[],
+    categories: MenuCategoryMap = menuCategories,
+  ) => {
     if (isFilterDisabled || !selectedItem) {
       // No filter applied - use original data processing
-      setDailyTiles(transformToTileDataWithFilter(transactions));
+      setDailyTiles(transformToTileDataWithFilter(transactions, undefined, categories));
       setWeeklyMedians(calculateWeeklyMediansWithFilter(transactions));
     } else {
       // Apply filter
-      setDailyTiles(transformToTileDataWithFilter(transactions, selectedItem));
+      setDailyTiles(transformToTileDataWithFilter(transactions, selectedItem, categories));
       setWeeklyMedians(calculateWeeklyMediansWithFilter(transactions, selectedItem));
     }
-  }, [isFilterDisabled, selectedItem]);
+  }, [isFilterDisabled, menuCategories, selectedItem]);
 
   useEffect(() => {
     loadData(selectedDays);

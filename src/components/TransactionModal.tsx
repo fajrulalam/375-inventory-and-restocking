@@ -349,10 +349,18 @@ export default function TransactionModal({
   // --- Items tab helpers ---
   const excludedItemNames = new Set([
     "subTotal",
+    "takeAwayFee",
     "totalCash",
     "totalQris",
     "totalOnline",
     "TotalOnline",
+    "totalVoucher",
+    "totalVoucherSettled",
+    "totalB2BRedeemed",
+    "totalB2BSettled",
+    "totalB2bRedeemed",
+    "totalB2bSettled",
+    "lastB2BSettlementAt",
     "actualCash",
     "actualOnline",
     "actualQris",
