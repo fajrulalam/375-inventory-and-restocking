@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import Image from "next/image";
@@ -17,6 +17,9 @@ import {
   fetchOpeningBalance,
   saveOpeningBalance,
   addExpense,
+  updateExpense,
+  deleteExpense,
+  syncDailyFinancialReportsWithOpeningBalance,
   buildCashflowRows,
   filterRowsByAccount,
   formatMonthLabel,
@@ -112,6 +115,163 @@ function PencilIcon() {
 function HamburgerIcon() {
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" /></svg>;
 }
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className ?? "w-4 h-4"}>
+      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
+    </svg>
+  );
+}
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className ?? "w-4 h-4"}>
+      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+interface CustomDropdownOption {
+  value: string;
+  label: string;
+  badge?: string;
+}
+
+function CustomDropdown({
+  value,
+  options,
+  onChange,
+  disabled,
+  className,
+}: {
+  value: string;
+  options: CustomDropdownOption[];
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && listRef.current) {
+      const selectedEl = listRef.current.querySelector('[aria-selected="true"]');
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [isOpen]);
+
+  const selectedOption = options.find((o) => o.value === value) ?? options[0];
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        return;
+      }
+      const curIdx = options.findIndex((o) => o.value === value);
+      const nextIdx =
+        e.key === "ArrowDown"
+          ? (curIdx + 1) % options.length
+          : (curIdx - 1 + options.length) % options.length;
+      onChange(options[nextIdx].value);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setIsOpen((prev) => !prev);
+    }
+  };
+
+  return (
+    <div className={`relative ${className ?? "inline-block"}`} ref={dropdownRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen((prev) => !prev)}
+        onKeyDown={handleKeyDown}
+        className="w-full flex items-center justify-between gap-4 pl-5 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-base font-semibold text-gray-900 shadow-sm hover:border-gray-300 hover:bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed select-none"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-2 truncate">
+          <span className="truncate">{selectedOption ? selectedOption.label : "Select..."}</span>
+          {selectedOption?.badge && (
+            <span className="px-2 py-0.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-full border border-emerald-200/60 shrink-0 leading-none">
+              {selectedOption.badge}
+            </span>
+          )}
+        </div>
+        <ChevronDownIcon
+          className={`w-5 h-5 text-gray-400 transition-transform duration-200 shrink-0 ${
+            isOpen ? "rotate-180 text-gray-700" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          ref={listRef}
+          className="absolute top-full left-0 mt-2 z-50 min-w-full sm:min-w-[260px] bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden py-1.5"
+          role="listbox"
+        >
+          <div className="max-h-72 overflow-y-auto overscroll-contain py-1">
+            {options.map((opt) => {
+              const isSelected = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-left text-sm font-semibold flex items-center justify-between gap-3 transition-colors cursor-pointer select-none ${
+                    isSelected
+                      ? "bg-gray-100 text-gray-900 font-bold"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="truncate">{opt.label}</span>
+                    {opt.badge && (
+                      <span className="px-2 py-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 rounded-full border border-emerald-200/60 shrink-0 leading-none">
+                        {opt.badge}
+                      </span>
+                    )}
+                  </div>
+                  {isSelected && <CheckIcon className="w-4 h-4 text-gray-900 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Modals
@@ -141,10 +301,25 @@ function OpeningBalanceModal({ balance, onSave, onClose }: { balance: OpeningBal
   );
 }
 
-function AddExpenseModal({ onSave, onClose }: { onSave: (d: { amount: number; category: string; sourceAccount: string }) => void; onClose: () => void }) {
+function AddExpenseModal({
+  defaultDate,
+  minDate,
+  maxDate,
+  monthName,
+  onSave,
+  onClose,
+}: {
+  defaultDate: string;
+  minDate?: string;
+  maxDate?: string;
+  monthName?: string;
+  onSave: (d: { amount: number; category: string; sourceAccount: string; dateStr: string }) => void;
+  onClose: () => void;
+}) {
   const [rawAmount, setRawAmount] = useState("");
   const [category, setCategory] = useState("");
   const [sourceAccount, setSourceAccount] = useState("Cash");
+  const [dateStr, setDateStr] = useState(defaultDate);
   const numericAmount = parseInt(rawAmount.replace(/\D/g, "")) || 0;
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digits = e.target.value.replace(/\D/g, "");
@@ -156,23 +331,248 @@ function AddExpenseModal({ onSave, onClose }: { onSave: (d: { amount: number; ca
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
-        <h3 className="text-lg font-bold text-gray-900 mb-5">Add Expense</h3>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Add Expense</h3>
+            {monthName && <p className="text-xs text-gray-400 mt-0.5">{monthName}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+          </button>
+        </div>
         <div className="space-y-4">
           <div><label className="block text-sm font-medium text-gray-500 mb-1.5">Description</label><input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Token Listrik" className={inputClass} /></div>
-          <div><label className="block text-sm font-medium text-gray-500 mb-1.5">Amount</label><input type="text" inputMode="numeric" value={rawAmount} onChange={handleAmountChange} placeholder="50.000" className={inputClass} /></div>
+          <div><label className="block text-sm font-medium text-gray-500 mb-1.5">Amount (Rp)</label><input type="text" inputMode="numeric" value={rawAmount} onChange={handleAmountChange} placeholder="50.000" className={inputClass} /></div>
+          <div>
+            <label className="block text-sm font-medium text-gray-500 mb-1.5">Date</label>
+            <input
+              type="date"
+              value={dateStr}
+              min={minDate}
+              max={maxDate}
+              onChange={(e) => setDateStr(e.target.value)}
+              className={inputClass}
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1.5">Account</label>
             <div className="flex gap-2">
               {["Cash", "QRIS", "Online"].map((k) => (
-                <button key={k} onClick={() => setSourceAccount(k)} className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${sourceAccount === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{k}</button>
+                <button key={k} type="button" onClick={() => setSourceAccount(k)} className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${sourceAccount === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{k}</button>
               ))}
             </div>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-          <button onClick={() => { if (numericAmount > 0 && category.trim()) onSave({ amount: numericAmount, category: category.trim(), sourceAccount }); }} disabled={numericAmount <= 0 || !category.trim()} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-40">Add Expense</button>
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+          <button type="button" onClick={() => { if (numericAmount > 0 && category.trim() && dateStr) onSave({ amount: numericAmount, category: category.trim(), sourceAccount, dateStr }); }} disabled={numericAmount <= 0 || !category.trim() || !dateStr} className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-40">Add Expense</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EditExpenseModal({
+  row,
+  minDate,
+  maxDate,
+  onSave,
+  onDelete,
+  onClose,
+  loading,
+}: {
+  row: CashflowRow;
+  minDate?: string;
+  maxDate?: string;
+  onSave: (d: { amount: number; category: string; sourceAccount: string; dateStr: string }) => void;
+  onDelete: () => void;
+  onClose: () => void;
+  loading: boolean;
+}) {
+  const initialAmount = row.expenseAmount ?? Math.abs(row.cashAmount || row.qrisAmount || row.onlineAmount);
+  const [category, setCategory] = useState(row.description);
+  const [rawAmount, setRawAmount] = useState(
+    initialAmount > 0 ? new Intl.NumberFormat("id-ID").format(initialAmount) : ""
+  );
+  const getAccountLabel = (acc?: string) => {
+    if (acc === "qris") return "QRIS";
+    if (acc === "online") return "Online";
+    return "Cash";
+  };
+  const [sourceAccount, setSourceAccount] = useState(getAccountLabel(row.sourceAccount));
+  const [dateStr, setDateStr] = useState(row.rawDate || "");
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const numericAmount = parseInt(rawAmount.replace(/\D/g, "")) || 0;
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, "");
+    if (!digits) { setRawAmount(""); return; }
+    setRawAmount(new Intl.NumberFormat("id-ID").format(parseInt(digits)));
+  };
+
+  const isChanged =
+    category.trim() !== row.description ||
+    numericAmount !== initialAmount ||
+    sourceAccount.toLowerCase() !== (row.sourceAccount ?? "cash").toLowerCase() ||
+    dateStr !== row.rawDate;
+
+  const isValid = category.trim().length > 0 && numericAmount > 0 && dateStr.length > 0;
+
+  const inputClass = "w-full px-4 py-3 rounded-xl border border-gray-200 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 p-7">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Edit Expense</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {row.addedFromDashboardWeb ? "Added from Dashboard" : "Added from POS"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+          </button>
+        </div>
+
+        {isConfirmingDelete ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800 space-y-3 my-2">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-100 text-red-600 mt-0.5">
+                <TrashIcon />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Delete this expense?</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Are you sure you want to delete <span className="font-semibold text-gray-800">&quot;{row.description}&quot;</span> (Rp {fmtAmount(initialAmount)})? This will permanently remove the record and recompute all cashflow balances.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(false)}
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Keep Expense
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? "Deleting..." : "Delete Permanently"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1.5">Description</label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. Es Krim 5 Box"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1.5">Amount (Rp)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={rawAmount}
+                onChange={handleAmountChange}
+                placeholder="50.000"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1.5">Date</label>
+              <input
+                type="date"
+                value={dateStr}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => setDateStr(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1.5">Account</label>
+              <div className="flex gap-2">
+                {["Cash", "QRIS", "Online"].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setSourceAccount(k)}
+                    className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
+                      sourceAccount === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                disabled={loading}
+                className="px-3 py-2.5 text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-1.5"
+                title="Delete this expense"
+              >
+                <TrashIcon />
+                Delete
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={loading}
+                  className="px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isValid) {
+                      onSave({
+                        amount: numericAmount,
+                        category: category.trim(),
+                        sourceAccount,
+                        dateStr,
+                      });
+                    }
+                  }}
+                  disabled={loading || !isValid || !isChanged}
+                  className="px-5 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-40"
+                >
+                  {loading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -366,12 +766,12 @@ function AnchorBalanceModal({ txnData, allRows, onAnchor, onClose, loading }: { 
 
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-500 mb-1.5">Date</label>
-          <div className="relative">
-            <select value={selectedDate} onChange={(e) => handleDateChange(e.target.value)} className="appearance-none w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 text-base font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent cursor-pointer">
-              {dates.map((d) => <option key={d} value={d}>{formatDayLabel(d)}</option>)}
-            </select>
-            <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-          </div>
+          <CustomDropdown
+            value={selectedDate}
+            options={dates.map((d) => ({ value: d, label: formatDayLabel(d) }))}
+            onChange={handleDateChange}
+            className="w-full"
+          />
         </div>
 
         <div className="space-y-4 mb-5">
@@ -451,7 +851,7 @@ function ExpenseTooltip({ row }: { row: CashflowRow }) {
   return (
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-50 pointer-events-none">
       <p>{ts}</p>
-      <p className="text-gray-400 mt-0.5">{row.addedFromDashboardWeb ? "Added from Dashboard" : "Added from POS"}</p>
+      <p className="text-gray-400 mt-0.5">{row.addedFromDashboardWeb ? "Added from Dashboard" : "Added from POS"} • Click to edit</p>
       <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-gray-900" />
     </div>
   );
@@ -541,6 +941,8 @@ export default function CashflowPage() {
   const [isLoadingMonths, setIsLoadingMonths] = useState(true);
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<CashflowRow | null>(null);
+  const [expenseLoading, setExpenseLoading] = useState(false);
   const [showAnchorModal, setShowAnchorModal] = useState(false);
   const [hoveredExpenseIdx, setHoveredExpenseIdx] = useState<number | null>(null);
   const [hoveredDiscIdx, setHoveredDiscIdx] = useState<number | null>(null);
@@ -548,12 +950,38 @@ export default function CashflowPage() {
   const [discrepancyModal, setDiscrepancyModal] = useState<{ type: "confirm" | "reject" | "undo"; info: DiscrepancyInfo } | null>(null);
   const [discrepancyLoading, setDiscrepancyLoading] = useState(false);
 
-  const isCurrentMonth = (() => {
-    if (!selectedMonth) return false;
+  const defaultExpenseDate = (() => {
     const now = new Date();
     const jkt = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
-    return selectedMonth === `${jkt.getFullYear()}-${String(jkt.getMonth() + 1).padStart(2, "0")}`;
+    const currentMonthId = `${jkt.getFullYear()}-${String(jkt.getMonth() + 1).padStart(2, "0")}`;
+    if (selectedMonth === currentMonthId) {
+      const y = jkt.getFullYear();
+      const m = String(jkt.getMonth() + 1).padStart(2, "0");
+      const d = String(jkt.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    if (selectedMonth) {
+      const [yStr, mStr] = selectedMonth.split("-");
+      const y = parseInt(yStr);
+      const m = parseInt(mStr);
+      const lastDay = new Date(y, m, 0).getDate();
+      return `${selectedMonth}-${String(lastDay).padStart(2, "0")}`;
+    }
+    return "";
   })();
+
+  const monthDateRange = (() => {
+    if (!selectedMonth) return { min: "", max: "" };
+    const [yStr, mStr] = selectedMonth.split("-");
+    const y = parseInt(yStr);
+    const m = parseInt(mStr);
+    const lastDay = new Date(y, m, 0).getDate();
+    return {
+      min: `${selectedMonth}-01`,
+      max: `${selectedMonth}-${String(lastDay).padStart(2, "0")}`,
+    };
+  })();
+
 
   useEffect(() => {
     let cancelled = false;
@@ -594,7 +1022,54 @@ export default function CashflowPage() {
     await saveOpeningBalance(db, selectedMonth, b, true);
     loadData();
   };
-  const handleAddExpense = async (d: { amount: number; category: string; sourceAccount: string }) => { setShowExpenseModal(false); await addExpense(db, d); loadData(); };
+  const handleAddExpense = async (d: { amount: number; category: string; sourceAccount: string; dateStr?: string }) => {
+    setShowExpenseModal(false);
+    await addExpense(db, d);
+    if (selectedMonth) {
+      await syncDailyFinancialReportsWithOpeningBalance(db, selectedMonth, openingBalance);
+    }
+    loadData();
+  };
+
+  const handleUpdateExpense = async (d: { amount: number; category: string; sourceAccount: string; dateStr: string }) => {
+    if (!editingExpense?.expenseId) return;
+    setExpenseLoading(true);
+    try {
+      await updateExpense(db, editingExpense.expenseId, {
+        amount: d.amount,
+        category: d.category,
+        sourceAccount: d.sourceAccount,
+        dateStr: d.dateStr,
+        originalTimestamp: editingExpense.expenseTimestamp,
+      });
+      if (selectedMonth) {
+        await syncDailyFinancialReportsWithOpeningBalance(db, selectedMonth, openingBalance);
+      }
+      setEditingExpense(null);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to update expense:", err);
+    } finally {
+      setExpenseLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!editingExpense?.expenseId) return;
+    setExpenseLoading(true);
+    try {
+      await deleteExpense(db, editingExpense.expenseId);
+      if (selectedMonth) {
+        await syncDailyFinancialReportsWithOpeningBalance(db, selectedMonth, openingBalance);
+      }
+      setEditingExpense(null);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to delete expense:", err);
+    } finally {
+      setExpenseLoading(false);
+    }
+  };
   const handleDownloadPDF = () => { if (allRows.length > 0) generateCashflowPDF(allRows, formatMonthLabel(selectedMonth)); };
 
   const openDiscrepancyModal = (row: CashflowRow, type: "confirm" | "reject" | "undo") => {
@@ -671,6 +1146,16 @@ export default function CashflowPage() {
   };
 
   const monthLabel = selectedMonth ? formatMonthLabel(selectedMonth) : "";
+  const monthOptions = months.map((m) => {
+    const fullLabel = formatMonthLabel(m);
+    const isOngoing = fullLabel.includes("(ongoing)");
+    const label = isOngoing ? fullLabel.replace(" (ongoing)", "").trim() : fullLabel;
+    return {
+      value: m,
+      label,
+      badge: isOngoing ? "ongoing" : undefined,
+    };
+  });
   const showCash = !activeAccount || activeAccount === "cash";
   const showQris = !activeAccount || activeAccount === "qris";
   const showOnline = !activeAccount || activeAccount === "online";
@@ -719,7 +1204,7 @@ export default function CashflowPage() {
                 Anchor balance
               </button>
             )}
-            {isCurrentMonth && (
+            {selectedMonth && (
               <button onClick={() => setShowExpenseModal(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" /></svg>
                 Add expense
@@ -731,12 +1216,12 @@ export default function CashflowPage() {
 
         {/* Month Selector */}
         <div className="mb-6">
-          <div className="relative inline-block">
-            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} disabled={isLoadingMonths} className="appearance-none pl-5 pr-11 py-3 rounded-xl border border-gray-200 bg-white text-base font-semibold text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent cursor-pointer disabled:opacity-50">
-              {months.map((m) => <option key={m} value={m}>{formatMonthLabel(m)}</option>)}
-            </select>
-            <ChevronDownIcon className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-          </div>
+          <CustomDropdown
+            value={selectedMonth}
+            options={monthOptions}
+            onChange={setSelectedMonth}
+            disabled={isLoadingMonths}
+          />
         </div>
 
         {/* Account Cards */}
@@ -795,11 +1280,11 @@ export default function CashflowPage() {
                     const descStyle = isHL
                       ? "font-bold text-gray-900"
                       : isExpense
-                      ? "font-semibold text-gray-800 cursor-help"
+                      ? "font-semibold text-gray-800 cursor-pointer hover:text-indigo-600 transition-colors"
                       : "font-semibold text-gray-800";
 
                     return (
-                      <tr key={idx} className={`${rowBg} ${daySep} transition-colors hover:bg-gray-100/50`}>
+                      <tr key={idx} className={`${rowBg} ${daySep} transition-colors hover:bg-gray-100/50 group`}>
                         {/* Date — small, gray */}
                         <td className={`px-5 py-3 whitespace-nowrap text-xs ${hasDate ? "text-slate-400 font-medium" : ""}`}>
                           {row.date}
@@ -820,11 +1305,33 @@ export default function CashflowPage() {
                               setHoveredAdjIdx(null);
                             }}
                           >
-                            <span className={`text-sm ${descStyle}`}>{row.description}</span>
+                            <span
+                              className={`text-sm ${descStyle}`}
+                              onClick={() => {
+                                if (isExpense) {
+                                  setHoveredExpenseIdx(null);
+                                  setEditingExpense(row);
+                                }
+                              }}
+                            >
+                              {row.description}
+                            </span>
                             {isDisc && !row.isDiscrepancyConfirmed && (
                               <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                             )}
                             {isOpening && <button onClick={() => setShowBalanceModal(true)} className="ml-2 p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="Edit opening balance"><PencilIcon /></button>}
+                            {isExpense && (
+                              <button
+                                onClick={() => {
+                                  setHoveredExpenseIdx(null);
+                                  setEditingExpense(row);
+                                }}
+                                className="ml-1.5 p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                title="Edit expense"
+                              >
+                                <PencilIcon />
+                              </button>
+                            )}
                             {hoveredExpenseIdx === idx && <ExpenseTooltip row={row} />}
                             {hoveredDiscIdx === idx && isDisc && (
                               <DiscrepancyTooltip
@@ -869,13 +1376,47 @@ export default function CashflowPage() {
                   )}
                 </tbody>
               </table>
+              <div className="px-6 py-4 bg-gray-50/70 border-t border-gray-200 flex items-center justify-between">
+                <button
+                  onClick={() => setShowExpenseModal(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold text-gray-700 hover:text-gray-900 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all duration-150"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-gray-500">
+                    <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+                  </svg>
+                  Add expense
+                </button>
+                <span className="text-xs text-gray-400">
+                  {displayRows.filter((r) => r.rowType === "expense").length} expense{displayRows.filter((r) => r.rowType === "expense").length === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {showBalanceModal && <OpeningBalanceModal balance={openingBalance} onSave={handleSaveBalance} onClose={() => setShowBalanceModal(false)} />}
-      {showExpenseModal && <AddExpenseModal onSave={handleAddExpense} onClose={() => setShowExpenseModal(false)} />}
+      {showExpenseModal && (
+        <AddExpenseModal
+          defaultDate={defaultExpenseDate}
+          minDate={monthDateRange.min}
+          maxDate={monthDateRange.max}
+          monthName={selectedMonth ? formatMonthLabel(selectedMonth).replace(" (ongoing)", "").trim() : undefined}
+          onSave={handleAddExpense}
+          onClose={() => setShowExpenseModal(false)}
+        />
+      )}
+      {editingExpense && (
+        <EditExpenseModal
+          row={editingExpense}
+          minDate={monthDateRange.min}
+          maxDate={monthDateRange.max}
+          onSave={handleUpdateExpense}
+          onDelete={handleDeleteExpense}
+          onClose={() => setEditingExpense(null)}
+          loading={expenseLoading}
+        />
+      )}
       {showAnchorModal && <AnchorBalanceModal txnData={txnData} allRows={allRows} onAnchor={handleAnchorBalance} onClose={() => setShowAnchorModal(false)} loading={anchorLoading} />}
       {discrepancyModal?.type === "confirm" && <ConfirmDiscrepancyModal info={discrepancyModal.info} onConfirm={handleConfirmDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}
       {discrepancyModal?.type === "reject" && <RejectDiscrepancyModal info={discrepancyModal.info} onReject={handleRejectDiscrepancy} onClose={() => setDiscrepancyModal(null)} loading={discrepancyLoading} />}

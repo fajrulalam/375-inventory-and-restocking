@@ -340,12 +340,18 @@ Standalone feature for correcting snowball errors. Accessed via the "Anchor bala
 ### Account Filter
 Three floating cards (Cash/QRIS/Online) at top showing closing balance. Clicking one filters table to that account's columns and relevant rows only. Click again to deselect.
 
-### Add Expense
-- Only available for the current (ongoing) month
-- "Add expense" text button at bottom of table
-- Modal with: description, amount (thousand-separator formatting, `inputMode="numeric"`), source account selection (uniform color when selected)
-- Writes to `Expenses` collection with `addedFromDashboardWeb: true` and `Timestamp.now()`
-- Hovering an expense row shows tooltip with timestamp and source indicator
+### Custom Themed Dropdowns
+Custom replacement for native `<select>` elements matching the design system (`bg-white rounded-xl border border-gray-200 shadow-sm`, rotating chevron, click-outside dismissal, escape key handling, option hover state, checkmark icon, and ongoing badge). Used for month selection and date selectors in modals.
+
+### Add & Edit Expenses
+- Available for both current and past (ended) months.
+- Triggers: "Add expense" button in the header and at the bottom of the table.
+- Modal inputs: Description, Amount (thousand-separator formatting, `inputMode="numeric"`), Date selector (constrained to the selected month's `minDate` and `maxDate`), and Source Account pills (Cash, QRIS, Online).
+- Writes to `Expenses` collection with `addedFromDashboardWeb: true` and Jakarta timestamp for the chosen date.
+- Past expense rows have a hover edit button (`PencilIcon`), interactive text hover, and "• Click to edit" tooltip indicator.
+- Edit modal allows modifying description, amount, date, source account, or permanently deleting the expense with a 2-step confirmation dialog.
+- Automatically calls `syncDailyFinancialReportsWithOpeningBalance` on add, edit, or delete to keep `DailyFinancialReport` closing values in sync across the month.
+- Hovering an expense row shows tooltip with timestamp and source indicator ("Added from Dashboard" or "Added from POS").
 
 ### PDF Export
 Uses `jspdf` + `jspdf-autotable`. Landscape layout, always exports all accounts regardless of active filter. Styled to match the table design: dark charcoal headers, semantic row tints, monospace numbers, no "Rp" prefix.

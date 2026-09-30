@@ -8,6 +8,8 @@ import {
   getDoc,
   setDoc,
   addDoc,
+  updateDoc,
+  deleteDoc,
   writeBatch,
   deleteField,
   orderBy,
@@ -39,6 +41,8 @@ export interface CashflowRow {
   expenseTimestamp?: Date;
   addedFromDashboardWeb?: boolean;
   isDiscrepancyConfirmed?: boolean;
+  expenseId?: string;
+  expenseAmount?: number;
 }
 
 export interface OpeningBalance {
@@ -269,6 +273,7 @@ export async function syncDailyFinancialReportsWithOpeningBalance(
   opening: OpeningBalance
 ): Promise<void> {
   const reports = await fetchDailyFinancialReportsForMonth(db, monthId);
+  if (reports.length === 0) return;
   const expenses = await fetchExpensesForMonth(db, monthId);
 
   let cashBal = opening.openingCash;
@@ -337,6 +342,24 @@ export async function syncDailyFinancialReportsWithOpeningBalance(
   await batch.commit();
 }
 
+export function createJakartaTimestamp(
+  dateStr: string,
+  originalTimestamp?: Date
+): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const now = new Date();
+  const refDate = originalTimestamp ?? now;
+  const jkt = new Date(
+    refDate.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+  );
+  const hours = jkt.getHours();
+  const minutes = jkt.getMinutes();
+  const seconds = jkt.getSeconds();
+
+  // Jakarta is UTC+7 (7 hours ahead of UTC)
+  return new Date(Date.UTC(y, m - 1, d, hours, minutes, seconds) - 7 * 3600 * 1000);
+}
+
 export async function addExpense(
   db: Firestore,
   data: {
@@ -344,17 +367,57 @@ export async function addExpense(
     category: string;
     sourceAccount: string;
     canteenId?: string;
+    dateStr?: string;
   }
 ): Promise<void> {
   const ref = collection(db, getCollectionPath("Expenses"));
+  const ts = data.dateStr
+    ? Timestamp.fromDate(createJakartaTimestamp(data.dateStr))
+    : Timestamp.now();
   await addDoc(ref, {
     amount: data.amount,
     category: data.category,
     sourceAccount: data.sourceAccount,
     canteenId: data.canteenId ?? "canteen375_plazaUnipdu",
-    timestamp: Timestamp.now(),
+    timestamp: ts,
     addedFromDashboardWeb: true,
   });
+}
+
+export async function updateExpense(
+  db: Firestore,
+  expenseId: string,
+  data: {
+    amount: number;
+    category: string;
+    sourceAccount: string;
+    dateStr?: string;
+    originalTimestamp?: Date;
+  }
+): Promise<void> {
+  const ref = doc(db, getCollectionPath("Expenses"), expenseId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {
+    amount: data.amount,
+    category: data.category,
+    sourceAccount: data.sourceAccount,
+    lastEditedFromDashboard: true,
+  };
+
+  if (data.dateStr) {
+    const newDate = createJakartaTimestamp(data.dateStr, data.originalTimestamp);
+    updates.timestamp = Timestamp.fromDate(newDate);
+  }
+
+  await updateDoc(ref, updates);
+}
+
+export async function deleteExpense(
+  db: Firestore,
+  expenseId: string
+): Promise<void> {
+  const ref = doc(db, getCollectionPath("Expenses"), expenseId);
+  await deleteDoc(ref);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,6 +776,8 @@ export function buildCashflowRows(
         sourceAccount: acct,
         expenseTimestamp: exp.timestamp,
         addedFromDashboardWeb: exp.addedFromDashboardWeb,
+        expenseId: exp.id,
+        expenseAmount: exp.amount,
       });
       rowCount++;
     }
