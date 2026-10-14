@@ -150,14 +150,45 @@ const initializeHourlyAggregates = () => {
 };
 
 /**
+ * Helper to generate a unique deduplication key for an order document.
+ * Prioritizes sourceStatusDocumentId combined with waktuPesan to prevent duplicate records
+ * from multiple devices or retries, while ensuring uniqueness across different days/times.
+ */
+const getOrderDedupeKey = (docId: string, data: DocumentData): string => {
+  const waktuPesanStr =
+    typeof data.waktuPesan === "string"
+      ? data.waktuPesan
+      : data.waktuPesan?.seconds
+      ? `${data.waktuPesan.seconds}_${data.waktuPesan.nanoseconds || 0}`
+      : "";
+
+  if (data.sourceStatusDocumentId) {
+    return `${data.sourceStatusDocumentId}_${waktuPesanStr}`;
+  }
+  if (data.customerNumber && waktuPesanStr) {
+    return `${data.customerNumber}_${waktuPesanStr}`;
+  }
+  return docId;
+};
+
+/**
  * Process served orders data and update hourly aggregates
  */
 const processServedOrdersData = (
   querySnapshot: QuerySnapshot<DocumentData>,
   hourlyAggregates: Record<string, HourlyAggregate>
 ) => {
+  const seenOrderKeys = new Set<string>();
+
   querySnapshot.forEach((doc) => {
     const data = doc.data();
+
+    // Prevent duplicate documents from skewing hourly aggregates
+    const dedupeKey = getOrderDedupeKey(doc.id, data);
+    if (seenOrderKeys.has(dedupeKey)) {
+      return;
+    }
+    seenOrderKeys.add(dedupeKey);
 
     // Check if timestampServe exists
     if (data.timestampServe) {
@@ -211,9 +242,17 @@ const processPendingOrdersData = (
   // Get start of day timestamp
   const startOfDay = getJakartaStartOfDay();
   const startOfDayMs = startOfDay.toDate().getTime();
+  const seenOrderKeys = new Set<string>();
 
   querySnapshot.forEach((doc) => {
     const data = doc.data();
+
+    // Prevent duplicate documents in pending data
+    const dedupeKey = getOrderDedupeKey(doc.id, data);
+    if (seenOrderKeys.has(dedupeKey)) {
+      return;
+    }
+    seenOrderKeys.add(dedupeKey);
 
     // Only process orders that are not completed, cancelled, settled, or closed open bills
     if (
@@ -399,9 +438,17 @@ const processServedOrdersForUI = (
   querySnapshot: QuerySnapshot<DocumentData>
 ): ServedOrderData[] => {
   const servedOrders: ServedOrderData[] = [];
+  const seenOrderKeys = new Set<string>();
 
   querySnapshot.forEach((doc) => {
     const data = doc.data();
+
+    // Prevent duplicate documents from appearing in the UI
+    const dedupeKey = getOrderDedupeKey(doc.id, data);
+    if (seenOrderKeys.has(dedupeKey)) {
+      return;
+    }
+    seenOrderKeys.add(dedupeKey);
 
     // Process waktuPesan timestamp string
     const waktuPesanDate = data.waktuPesan
@@ -458,9 +505,17 @@ const processPendingOrdersForUI = (
   querySnapshot: QuerySnapshot<DocumentData>
 ): PendingOrderData[] => {
   const pendingOrders: PendingOrderData[] = [];
+  const seenOrderKeys = new Set<string>();
 
   querySnapshot.forEach((doc) => {
     const data = doc.data();
+
+    // Prevent duplicate documents in pending UI list
+    const dedupeKey = getOrderDedupeKey(doc.id, data);
+    if (seenOrderKeys.has(dedupeKey)) {
+      return;
+    }
+    seenOrderKeys.add(dedupeKey);
 
     // Process order items to add orderType
     const orderItems = Array.isArray(data.orderItems)
